@@ -1,8 +1,9 @@
 package com.edgestream.tv.data
 
 /**
- * The one-line briefing across the top of Home: what is live, what is next and what the weather
- * is doing, written from the app's own live data. [Part.key] marks the words to light up.
+ * The one-line briefing across the top of Home: what is live and what is next, written from the
+ * app's own live data. Weather lives under the clock and warnings in their alert, so neither is
+ * repeated here. [Part.key] marks the words to light up.
  */
 object Briefing {
     data class Part(val text: String, val key: Boolean = false)
@@ -13,9 +14,6 @@ object Briefing {
     fun compose(
         games: List<Sports.Game>,
         picks: List<NflPicks.Pick>,
-        tempC: Double?,
-        city: String?,
-        alert: String?,
         timeOf: (Long) -> String,
         now: Long,
     ): List<Part> {
@@ -48,8 +46,6 @@ object Briefing {
         }
         val locks = picks.count { it.tier == NflModel.Tier.LOCK && it.game.state == Sports.State.UPCOMING }
         if (locks > 0) sentence(Part("$locks NFL ${if (locks == 1) "Lock" else "Locks"}", key = true), Part(" on the slate"))
-        if (alert != null) sentence(Part("Warning: ", key = true), Part(alert))
-        if (tempC != null && city != null) sentence(Part("${tempC.toInt()}° in $city"))
         return out
     }
 }

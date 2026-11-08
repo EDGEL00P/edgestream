@@ -68,10 +68,9 @@ fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, modifier: Mod
     val cal = remember(minute) { Calendar.getInstance().apply { timeInMillis = clock } }
     val games by vm.sportsGames.collectAsStateWithLifecycle()
     val nfl by vm.nflBoard.collectAsStateWithLifecycle()
-    val alert by vm.weatherAlert.collectAsStateWithLifecycle()
-    val briefing = remember(games, nfl, weather?.tempC, alert, minute) {
+    val briefing = remember(games, nfl, minute) {
         com.edgestream.tv.data.Briefing.compose(
-            games, nfl?.picks.orEmpty(), weather?.tempC?.takeIf { !it.isNaN() }, weather?.city, alert?.title,
+            games, nfl?.picks.orEmpty(),
             timeOf = { Format.time(it, settings.use24h) }, now = clock,
         )
     }

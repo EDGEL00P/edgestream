@@ -281,8 +281,11 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
                     .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !s.subtitlesOn)
                     .build()
                 player.addListener(listener)
+                if (com.edgestream.tv.data.Sports.traceOn) player.addAnalyticsListener(metrics)
             }
     }
+
+    private val metrics = PlaybackMetrics()
 
     init {
         val s = settings.value
@@ -347,6 +350,7 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
             }
             .build()
         _state.value = PlaybackState(url = url, title = title, isLive = isLive, buffering = true)
+        if (com.edgestream.tv.data.Sports.traceOn) { metrics.summary(); metrics.begin(title) }
         // Tunnelling is decided per stream, before prepare (see tunnelFor).
         trackSelector.parameters = trackSelector.buildUponParameters().setTunnelingEnabled(tunnelFor(settings.value.tunneling, isLive)).build()
         exo.setMediaItem(item, startPositionMs)

@@ -19,21 +19,22 @@ class BriefingTest {
     )
 
     @Test fun livePriorityNextPickLocksAndWeather() {
-        val parts = Briefing.compose(listOf(soccer, live, next), listOf(pick(next, NflModel.Tier.LOCK)), 19.4, "Childers", null, { "4:00 am" }, now = 1_000)
+        val parts = Briefing.compose(listOf(soccer, live, next), listOf(pick(next, NflModel.Tier.LOCK)), { "4:00 am" }, now = 1_000)
         assertEquals(
-            "2 live. Bengals lead Falcons 31–17  ·  Next: Jets at Chiefs 4:00 am, KC 86% Lock  ·  1 NFL Lock on the slate  ·  19° in Childers",
+            "2 live. Bengals lead Falcons 31–17  ·  Next: Jets at Chiefs 4:00 am, KC 86% Lock  ·  1 NFL Lock on the slate",
             text(parts),
         )
         assertTrue(parts.first().key)
     }
 
     @Test fun levelScoresAndQuietDays() {
-        assertEquals("1 live. Arsenal and Chelsea level at 1–1", text(Briefing.compose(listOf(soccer), emptyList(), null, null, null, { "" }, 0)))
-        assertTrue(Briefing.compose(emptyList(), emptyList(), null, null, null, { "" }, 0).isEmpty())
+        assertEquals("1 live. Arsenal and Chelsea level at 1–1", text(Briefing.compose(listOf(soccer), emptyList(), { "" }, 0)))
+        assertTrue(Briefing.compose(emptyList(), emptyList(), { "" }, 0).isEmpty())
     }
 
-    @Test fun warningsAreCalledOut() {
-        val parts = Briefing.compose(emptyList(), emptyList(), 20.0, "Childers", "Severe thunderstorm", { "" }, 0)
-        assertEquals("Warning: Severe thunderstorm  ·  20° in Childers", text(parts))
+    @Test fun weatherIsNeverRepeatedHere() {
+        // The clock tile owns the weather; the briefing only covers sport.
+        val text = text(Briefing.compose(listOf(soccer), emptyList(), { "" }, 0))
+        assertTrue("°" !in text)
     }
 }
