@@ -334,8 +334,13 @@ for url, chans in guides.items():
                 for cc in countries:
                     by_call[(cc, m.group(1))].append((url, cid))
 
-db = sqlite3.connect(db_path)
-rows = db.execute("select name, groupName, epgId, tvgId from channels").fetchall()
+db = None if db_path.endswith(".json") else sqlite3.connect(db_path)
+if db_path.endswith(".json"):
+    # A debug-build lineup export (adb pull /sdcard/Android/data/com.edgestream.tv/files/lineup.json):
+    # the TV's database is encrypted, so this is how the lineup reaches the tools now.
+    rows = [(c["name"], c["groupName"], c.get("epgId"), c.get("tvgId")) for c in json.load(open(db_path, encoding="utf-8"))]
+else:
+    rows = db.execute("select name, groupName, epgId, tvgId from channels").fetchall()
 mapping = collections.defaultdict(dict)  # key -> {country: (url, id)}
 mapping_how = {}  # (key, country) -> how it was matched
 stats, unmatched = collections.Counter(), collections.Counter()

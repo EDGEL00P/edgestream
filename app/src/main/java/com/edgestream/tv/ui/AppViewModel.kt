@@ -114,6 +114,16 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
             val deduped = com.edgestream.tv.data.ChannelDedupe.apply(display, favourites.toSet(), cleanTitles)
             val kept = deduped.mapTo(HashSet(deduped.size)) { it.key }
             if (trace) android.util.Log.d("EdgeStartup", "lineup: ${deduped.size} shown, cleaned at ${t()} ms")
+            // Debug builds: the lineup's names for tools/epg (map rebuild, merged guide). Names and
+            // guide ids only: no stream addresses, no logins.
+            if (trace) runCatching {
+                val out = org.json.JSONArray()
+                list.forEach { c ->
+                    out.put(org.json.JSONObject().put("name", c.name).put("groupName", c.groupName)
+                        .put("epgId", c.epgId ?: org.json.JSONObject.NULL).put("tvgId", c.tvgId ?: org.json.JSONObject.NULL))
+                }
+                app.getExternalFilesDir(null)?.let { java.io.File(it, "lineup.json").writeText(out.toString()) }
+            }
             ChannelCatalog(
                 display = deduped,
                 badges = if (!on) emptyMap() else cleanInfos.filterKeys { it in kept },
