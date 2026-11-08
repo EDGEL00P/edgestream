@@ -49,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.edgestream.tv.data.NflModel
 import com.edgestream.tv.data.NflPicks
 import com.edgestream.tv.data.NflProps
+import com.edgestream.tv.ui.components.TeamLogo
 import com.edgestream.tv.data.Racing
 import com.edgestream.tv.data.Sports
 import com.edgestream.tv.data.db.ChannelEntity
@@ -96,7 +97,14 @@ fun BettingScreen(vm: AppViewModel) {
     val nflPicks = nfl?.picks.orEmpty()
     val nflValue = if (marketMode == "all" || marketMode == "nfl") nflPicks.filter { it.values.isNotEmpty() } else emptyList()
     val nflAll = if (marketMode == "nfl") nflPicks else emptyList()
-    val nflProps = if (marketMode == "nfl") nfl?.props.orEmpty().take(20) else emptyList()
+    // Props grouped per team, games in kickoff order, each side's strongest leans first.
+    val nflPropGroups = if (marketMode != "nfl") emptyList() else nflPicks.flatMap { pick ->
+        val leans = nfl?.props.orEmpty().filter { it.espnGame == pick.espnId }
+        listOf(pick.game.away to pick.game.home, pick.game.home to pick.game.away).mapNotNull { (team, opponent) ->
+            leans.filter { NflProps.playsFor(it.player, team.abbr) }.take(5).takeIf { it.isNotEmpty() }
+                ?.let { PropGroup(pick, team, opponent, it) }
+        }
+    }
     val nflLocks = if (marketMode == "nfl") nflPicks.filter { it.tier != null }.sortedByDescending { it.winProb } else emptyList()
     val nflFirst = live.isEmpty() && upcoming.isEmpty() && sortedRaces.isEmpty()
 
@@ -179,11 +187,12 @@ fun BettingScreen(vm: AppViewModel) {
                 NflPickRow(p, settings.use24h, if (i == 0 && nflFirst && nflValue.isEmpty() && nflLocks.isEmpty()) firstRow else null, "betting:row|nfl:${p.game.id}") { gameSheet = p.game }
             }
         }
-        if (nflProps.isNotEmpty()) {
+        if (nflPropGroups.isNotEmpty()) {
             item { BetSection("NFL PROPS · LEANS", "projection vs line · unvalidated, graded live") }
-            itemsIndexed(nflProps, key = { _, l -> "nfl-prop:${l.espnGame}:${l.player.gsis}:${l.market}" }) { _, l ->
-                PropRow(l, "betting:row|prop:${l.espnGame}:${l.player.gsis}:${l.market}") {
-                    nflPicks.firstOrNull { it.espnId == l.espnGame }?.let { gameSheet = it.game }
+            nflPropGroups.forEach { group ->
+                item(key = "nfl-prop-team:${group.pick.espnId}:${group.team.abbr}") { PropTeamHeader(group) }
+                itemsIndexed(group.leans, key = { _, l -> "nfl-prop:${l.espnGame}:${l.player.gsis}:${l.market}" }) { _, l ->
+                    PropRow(l, "betting:row|prop:${l.espnGame}:${l.player.gsis}:${l.market}") { gameSheet = group.pick.game }
                 }
             }
         }
@@ -541,6 +550,23 @@ private fun NflPickRow(pick: NflPicks.Pick, use24h: Boolean, focusRequester: Foc
                 else -> Pill("MODEL", color = Edge.Accent2)
             }
         }
+    }
+}
+
+private class PropGroup(val pick: NflPicks.Pick, val team: Sports.Team, val opponent: Sports.Team, val leans: List<NflProps.Lean>)
+
+@Composable
+private fun PropTeamHeader(group: PropGroup) {
+    val atHome = group.team.abbr == group.pick.game.home.abbr
+    Row(Modifier.fillMaxWidth().padding(top = 10.dp, start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        TeamLogo(group.team.logo, group.team.name, size = 34.dp)
+        Spacer(Modifier.width(12.dp))
+        Text(group.team.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(12.dp))
+        Text(
+            "${if (atHome) "vs" else "at"} ${group.opponent.name}",
+            style = MaterialTheme.typography.labelMedium, color = Edge.Faint,
+        )
     }
 }
 

@@ -47,7 +47,8 @@ object NflProps {
         RECEPTIONS("Total Receptions (incl. overtime)", "Receptions", "receptions", 1.2),
     }
 
-    data class Player(val gsis: String, val name: String, val position: String)
+    /** [team] is nflverse's abbreviation for the side the player last played for. */
+    data class Player(val gsis: String, val name: String, val position: String, val team: String = "")
     data class Projection(val mean: Double, val sd: Double, val games: Int)
 
     /** Every player's projection per market, plus the id join and the stats needed to grade. */
@@ -109,17 +110,21 @@ object NflProps {
         csvRows(playersCsv) { col ->
             val espn = col("espn_id")?.substringBefore('.') ?: return@csvRows
             val gsis = col("gsis_id") ?: return@csvRows
-            byEspn[espn] = Player(gsis, col("display_name") ?: return@csvRows, col("position").orEmpty())
+            byEspn[espn] = Player(gsis, col("display_name") ?: return@csvRows, col("position").orEmpty(), col("latest_team").orEmpty())
         }
         // Chronological per player: (season, week) sort key → stat line.
         val history = HashMap<String, MutableList<Pair<Int, Map<Market, Double>>>>()
         val results = HashMap<Pair<String, String>, Map<Market, Double>>()
+        val lastTeam = HashMap<String, Pair<Int, String>>()
         for (csv in statsCsvs) csvRows(csv) { col ->
             val gsis = col("player_id") ?: return@csvRows
             val season = col("season")?.toIntOrNull() ?: return@csvRows
             val week = col("week")?.toIntOrNull() ?: return@csvRows
             val line = Market.entries.associateWith { m -> col(m.column)?.toDoubleOrNull() ?: 0.0 }
             history.getOrPut(gsis) { ArrayList() } += (season * 100 + week) to line
+            col("team")?.let { team ->
+                if ((lastTeam[gsis]?.first ?: -1) < season * 100 + week) lastTeam[gsis] = (season * 100 + week) to team
+            }
             col("game_id")?.let { results[it to gsis] = line }
         }
         val projections = HashMap<Pair<String, Market>, Projection>()
@@ -130,7 +135,9 @@ object NflProps {
                 project(values, m)?.let { projections[gsis to m] = it }
             }
         }
-        return Book(byEspn, projections, results)
+        // A traded or re-signed player's current side comes from his latest game, not the roster file.
+        val players = byEspn.mapValues { (_, p) -> lastTeam[p.gsis]?.let { p.copy(team = it.second) } ?: p }
+        return Book(players, projections, results)
     }
 
     /** Recency-weighted mean and spread of [values] (oldest first); null when too few games. */
@@ -285,4 +292,11 @@ object NflProps {
     }
 
     fun log(dir: File) = PropLog(File(dir, LOG_FILE))
+
+    /** nflverse and ESPN spell two franchises differently. */
+    private val ESPN_ABBR = mapOf("WAS" to "WSH", "LA" to "LAR")
+
+    /** True when [player] plays for the team ESPN abbreviates [espnAbbr]. */
+    fun playsFor(player: Player, espnAbbr: String): Boolean =
+        (ESPN_ABBR[player.team] ?: player.team).equals(espnAbbr, ignoreCase = true)
 }

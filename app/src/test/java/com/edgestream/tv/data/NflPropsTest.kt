@@ -61,6 +61,15 @@ class NflPropsTest {
         assertEquals("Ace Receiver Over 75.5 Rec Yds", l.selection)
     }
 
+    @Test fun playerTeamComesFromLatestGameAndMapsToEspn() {
+        val roster = "gsis_id,display_name,position,espn_id,latest_team\n00-1,Traded Guy,WR,111,NYJ\n00-2,Rams Guy,WR,222,LA\n"
+        val csv = "player_id,season,week,game_id,team,passing_yards,rushing_yards,receiving_yards,receptions\n" +
+            "00-1,2026,2,g2,WAS,0,0,50,4\n00-1,2026,1,g1,NYJ,0,0,50,4\n"
+        val book = NflProps.buildBook(roster, listOf(csv))
+        assertTrue(NflProps.playsFor(book.byEspn.getValue("111"), "WSH"))
+        assertTrue(NflProps.playsFor(book.byEspn.getValue("222"), "LAR"))
+    }
+
     /** A line far below the player's average is the market pricing a role change, not value. */
     @Test fun skipsLinesThatSignalARoleChange() {
         val book = NflProps.buildBook(players, listOf(stats(*(1..8).map { "00-1,2026,$it,2026_0${it}_A_B,0,0,95,6" }.toTypedArray())))
