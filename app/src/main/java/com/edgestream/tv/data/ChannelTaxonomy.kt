@@ -17,31 +17,20 @@ object ChannelTaxonomy {
     /** Most specific sports first; the generic "Sports" rule comes last. */
     private val SPORT_LEAGUES = listOf(
         rule("NFL", """\b(nfl|redzone|sunday ticket|nfl network)\b"""),
-        rule("College Football", """\b(college football|ncaaf|sec network|acc network|big ten|pac-12|pac12)\b"""),
-        rule("College Basketball", """\b(college basketball|ncaab|march madness)\b"""),
-        rule("NBA", """\b(nba|nbatv|league pass)\b"""),
-        rule("WNBA", """\bwnba\b"""),
-        rule("NHL", """\b(nhl|hockey|center ice)\b"""),
-        rule("MLB", """\b(mlb|baseball|extra innings)\b"""),
+        rule("College Sports", """\b(college|ncaaf|ncaab|ncaa|sec network|acc network|big ten|btn|pac-12|pac12|march madness)\b"""),
+        rule("Basketball", """\b(nba|nbatv|league pass|wnba|basketball)\b"""),
+        rule("Hockey", """\b(nhl|hockey|center ice|ohl|whl|qmjhl|ahl|chl)\b"""),
+        rule("Baseball", """\b(mlb|baseball|extra innings)\b"""),
         rule("NRL", """\bnrl\b"""),
         rule("AFL", """\b(afl|australian football)\b"""),
-        rule("Super Rugby", """\bsuper rugby\b"""),
-        rule("Premier League", """\b(premier league|epl)\b"""),
-        rule("Champions League", """\b(champions league|ucl)\b"""),
-        rule("MLS", """\bmls\b"""),
-        rule("F1", """\b(f1|formula 1|formula one|motorsport)\b"""),
-        rule("UFC", """\b(ufc|mma|fight pass)\b"""),
-        rule("Boxing", """\b(boxing|matchroom|top rank)\b"""),
-        rule("Wrestling", """\b(wwe|wrestling|aew)\b"""),
+        rule("Rugby", """\b(rugby|super rugby)\b"""),
+        rule("Motorsport", """\b(f1|formula 1|formula one|motorsport|nascar|indycar|motogp|supercars)\b"""),
+        rule("Fight Sports", """\b(ufc|mma|fight pass|boxing|matchroom|top rank|wwe|wrestling|aew|pbr)\b"""),
         rule("Golf", """\b(golf|pga|lpga)\b"""),
         rule("Tennis", """\b(tennis|atp|wta)\b"""),
         rule("Cricket", """\b(cricket|t20|bbl|sheffield shield)\b"""),
-        rule("Darts", """\bdarts\b"""),
-        rule("Snooker", """\bsnooker\b"""),
-        rule("Racing", """\b(racing|nascar|indycar)\b"""),
-        rule("Rugby", """\brugby\b"""),
-        rule("Soccer", """\b(soccer|football)\b"""),
-        rule("Sports", """\b(sport|sports|espn|fs1|fs2|sky sports|bt sport|tnt sports|sportsnet|tsn|rds|eurosport|dazn|bein|kayo|optus sport|stan sport|ppv|pay per view|redzone|league pass|sunday ticket|center ice|extra innings)\b"""),
+        rule("Racing", """\b(racing|tvg|greyhound|harness|trackside)\b"""),
+        rule("Soccer", """\b(soccer|football|premier league|epl|champions league|ucl|mls|efl|a-league|la liga|serie a|bundesliga)\b"""),
     )
 
     private val SPORT = Regex(
@@ -49,7 +38,7 @@ object ChannelTaxonomy {
             """nfl|nba|nhl|mlb|wnba|ncaa|college|ufc|mma|boxing|dazn|bein|golf|tennis|f1|formula|motorsport|""" +
             """racing|premier|epl|champions league|ucl|mls|afl|a-league|soccer|football|cricket|rugby|nrl|""" +
             """kayo|optus sport|stan sport|redzone|league pass|sunday ticket|ppv|pay per view|wwe|wrestling|""" +
-            """matchroom|top rank|darts|snooker|hockey|baseball)\b""",
+            """matchroom|top rank|darts|snooker|hockey|baseball|ohl|whl|qmjhl|ahl|chl|pbr|flo)\b""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -90,6 +79,14 @@ object ChannelTaxonomy {
             """bbc one|bbc two|usa network|tnt|tbs|fx|fxx|syfy|bravo|e!|oxygen|comedy)\b""",
         RegexOption.IGNORE_CASE,
     )
+    /** Network affiliate groups ("AM | USA NBC", "UK LOCAL CHANNEL"): the local channels shelf. */
+    private val LOCAL_GROUP = Regex("""\b(abc|nbc|cbs|fox|cw|pbs|my|metv|ion|telemundo|univision|local)\b""", RegexOption.IGNORE_CASE)
+    /** Groups that only hold per-event slots (pay-per-view, ESPN+ and the like). */
+    private val NATIONAL_NEWS = Regex("""\b(fox news|fox business|abc news|cbs news|nbc news|msnbc|cnn|cnbc|newsmax|newsnation)\b""", RegexOption.IGNORE_CASE)
+    private val EVENT_GROUP = Regex("""\b(ppv|live events?|events?|espn plus|espn\+)\b""", RegexOption.IGNORE_CASE)
+    private val MOVIE_LOOPS = Regex("""\bcinemania\b""", RegexOption.IGNORE_CASE)
+    private val KIDS_LOOPS = Regex("""\bplay kidz\b""", RegexOption.IGNORE_CASE)
+
     private val ADULT = Regex("""\b(xxx|adult|porn|18\+|playboy|hustler)\b""", RegexOption.IGNORE_CASE)
 
     private val COUNTRY_NAMES = mapOf(
@@ -114,41 +111,98 @@ object ChannelTaxonomy {
         val text = "${channel.name} ${channel.groupName} ${channel.tvgId.orEmpty()} ${channel.epgId.orEmpty()}"
         // The catalogue's category is curated; the name patterns below are the fallback guess.
         val known = ChannelIdentities.current?.get(channel.identity)?.categories?.firstNotNullOfOrNull { CATEGORY_LABELS[it] }
+        val sporty = known == "Sports" || SPORT.containsMatchIn(text)
         val raw = when {
+            // A slot that only carries whichever event is booked is not a channel to browse by genre.
+            NameListings.eventStart(channel.name) != null || NameListings.isIdleSlot(channel.name) ||
+                EVENT_GROUP.containsMatchIn(channel.groupName) -> "Live Events"
+            MOVIE_LOOPS.containsMatchIn(text) -> "Movies"
+            KIDS_LOOPS.containsMatchIn(text) -> "Kids"
+            !sporty && NameListings.isLoop(channel) -> "24/7"
             known == "Sports" -> SPORT_LEAGUES.firstOrNull { it.regex.containsMatchIn(text) }?.label ?: "Sports"
             known != null -> known
             SPORT.containsMatchIn(text) ->
                 SPORT_LEAGUES.firstOrNull { it.regex.containsMatchIn(text) }?.label ?: "Sports"
-            WEATHER.containsMatchIn(text) -> "Weather"
+            // An affiliate group's stations ("NBC Chicago News") are local; the national networks are News.
+            LOCAL_GROUP.containsMatchIn(channel.groupName) && !NATIONAL_NEWS.containsMatchIn(channel.name) -> "Local Channels"
+            NEWS.containsMatchIn(channel.name) -> "News"
+            WEATHER.containsMatchIn(text) -> "Other"
             NEWS.containsMatchIn(text) -> "News"
             KIDS.containsMatchIn(text) -> "Kids"
             MOVIES.containsMatchIn(text) -> "Movies"
             DOCUMENTARY.containsMatchIn(text) -> "Documentary"
             MUSIC.containsMatchIn(text) -> "Music"
             LIFESTYLE.containsMatchIn(text) -> "Lifestyle"
-            SHOPPING.containsMatchIn(text) -> "Shopping"
-            RELIGION.containsMatchIn(text) -> "Religion"
-            EDUCATION.containsMatchIn(text) -> "Education"
+            SHOPPING.containsMatchIn(text) || RELIGION.containsMatchIn(text) || EDUCATION.containsMatchIn(text) -> "Other"
             ENTERTAINMENT.containsMatchIn(text) -> "Entertainment"
             ADULT.containsMatchIn(text) -> "Adult"
             else -> NameCleaner.tidyGroup(channel.groupName).ifBlank { "Other" }
         }
-        val label = canonicalLabel(raw)
         val country = countryName(channel)
+        // A provider's own label that names no category (a brand, "Streamed Channels") is not a shelf;
+        // a group named just for the country ("AS | AUSTRALIA") holds its everyday local channels.
+        val label = canonicalLabel(raw).let { l ->
+            PROVIDER_LABELS.firstOrNull { it.first.containsMatchIn(l) }?.second
+                ?: when {
+                    l in KNOWN_LABELS || l in SPORT_LABELS || l in SHELVES -> l
+                    country != null && l.equals(country, ignoreCase = true) -> "Local Channels"
+                    else -> "Other"
+                }
+        }
         return when {
             country != null && !label.contains(country, ignoreCase = true) -> "$country · $label"
             // A channel with no country code anywhere is not a second "UK · General"; say so.
-            country == null && !label.contains(" · ") -> "Other · $label"
+            country == null && !label.contains(" · ") -> "$INTERNATIONAL · $label"
             else -> label
+        }
+    }
+
+    private const val INTERNATIONAL = "International"
+    private val SHELVES = setOf("Live Events", "Local Channels", "24/7")
+    private val PROVIDER_LABELS = listOf(
+        Regex("""\b(hulu|peacock|paramount|max|netflix|prime|apple)\b""", RegexOption.IGNORE_CASE) to "Entertainment",
+        Regex("""\bspectrum\b""", RegexOption.IGNORE_CASE) to "Local Channels",
+        Regex("""^general$""", RegexOption.IGNORE_CASE) to "Entertainment",
+    )
+    private val SPORT_LABELS = setOf("NFL", "College Sports", "Basketball", "Hockey", "Baseball", "NRL", "AFL", "Rugby", "Motorsport", "Fight Sports", "Golf", "Tennis", "Cricket", "Racing", "Soccer", "Sports")
+    /** A country with fewer channels than this is one group; it is too small to split. */
+    private const val SMALL_COUNTRY = 40
+    /** A category with fewer channels than this joins its country's Sports or Other group. */
+    private const val SMALL_GROUP = 10
+
+    /**
+     * The lineup as groups a person can scan, like a TV's own guide: one country's big categories,
+     * small categories folded into "Sports" or "Other", and small countries as a single group.
+     * Group order follows the lineup (first channel seen).
+     */
+    fun groupAll(channels: List<ChannelEntity>): Map<String, List<ChannelEntity>> {
+        val fine = channels.map { it to groupKey(it) }
+        val sizes = fine.groupingBy { it.second }.eachCount()
+        val countries = sizes.entries.groupingBy { it.key.substringBefore(" · ") }.fold(0) { acc, e -> acc + e.value }
+        val folded = sizes.keys.associateWith { key -> fold(key, sizes.getValue(key), countries[key.substringBefore(" · ")] ?: 0) }
+        return LinkedHashMap<String, MutableList<ChannelEntity>>().also { out ->
+            fine.forEach { (c, key) -> out.getOrPut(folded.getValue(key)) { mutableListOf() } += c }
+        }
+    }
+
+    internal fun fold(key: String, size: Int, countrySize: Int): String {
+        val country = key.substringBefore(" · ")
+        val label = key.substringAfter(" · ", "")
+        return when {
+            label.isEmpty() -> key
+            countrySize < SMALL_COUNTRY -> country
+            size >= SMALL_GROUP -> key
+            label in SPORT_LABELS -> "$country · Sports"
+            else -> "$country · Other"
         }
     }
 
     /** iptv-org categories that name a shelf; "general", "series" and the like fall through to the name. */
     private val CATEGORY_LABELS = mapOf(
-        "sports" to "Sports", "news" to "News", "business" to "News", "weather" to "Weather",
+        "sports" to "Sports", "news" to "News", "business" to "News", "weather" to "Other",
         "kids" to "Kids", "animation" to "Kids", "movies" to "Movies", "documentary" to "Documentary",
         "science" to "Documentary", "music" to "Music", "lifestyle" to "Lifestyle", "cooking" to "Lifestyle",
-        "travel" to "Lifestyle", "shop" to "Shopping", "religious" to "Religion", "education" to "Education",
+        "travel" to "Lifestyle", "shop" to "Other", "religious" to "Other", "education" to "Other",
         "comedy" to "Entertainment", "entertainment" to "Entertainment",
     )
 

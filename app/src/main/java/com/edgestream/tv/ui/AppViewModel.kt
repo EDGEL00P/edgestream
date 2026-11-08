@@ -212,11 +212,7 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
             val visible = if (s.hideOffline) list.filter { !it.offline } else list
             // One classified bucket per channel, so Live and Guide show the same country/genre
             // hierarchy instead of each provider's inconsistent group names.
-            val groups = LinkedHashMap<String, MutableList<ChannelEntity>>().also { map ->
-                visible.forEach { ch ->
-                    map.getOrPut(com.edgestream.tv.data.ChannelTaxonomy.groupKey(ch)) { mutableListOf() } += ch
-                }
-            }.filterKeys { !(s.hideAdult && isAdult(it)) && it !in s.hiddenGroups }
+            val groups = com.edgestream.tv.data.ChannelTaxonomy.groupAll(visible).filterKeys { !(s.hideAdult && isAdult(it)) && it !in s.hiddenGroups }
                 .mapValues { (_, chs) -> sortChannels(chs, s.channelSort, recency) }
             val ordered = when (s.groupSort) {
                 "az" -> groups.entries.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.key })
@@ -233,8 +229,8 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
     /** Every group with its channel count, hidden ones included, for Settings › Channels › Groups. */
     val allGroups: StateFlow<List<Pair<String, Int>>> =
         combine(channels, settings.map { it.hideAdult to it.hideOffline }.distinctUntilChanged()) { list, (adult, offline) ->
-            (if (offline) list.filter { !it.offline } else list)
-                .groupingBy { com.edgestream.tv.data.ChannelTaxonomy.groupKey(it) }.eachCount()
+            com.edgestream.tv.data.ChannelTaxonomy.groupAll(if (offline) list.filter { !it.offline } else list)
+                .mapValues { it.value.size }
                 .filterKeys { !(adult && isAdult(it)) }
                 .toList().sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.first })
         }.flowOn(kotlinx.coroutines.Dispatchers.Default)

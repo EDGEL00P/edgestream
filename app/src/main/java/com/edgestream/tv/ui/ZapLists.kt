@@ -1,6 +1,5 @@
 package com.edgestream.tv.ui
 
-import com.edgestream.tv.data.ChannelTaxonomy
 import com.edgestream.tv.data.db.ChannelEntity
 
 /**
@@ -9,5 +8,4 @@ import com.edgestream.tv.data.db.ChannelEntity
  * hidden by a filter falls back to itself, so Up/Down simply stays put.
  */
 fun zapListFor(channel: ChannelEntity, groups: Map<String, List<ChannelEntity>>): List<ChannelEntity> =
-    groups[ChannelTaxonomy.groupKey(channel)]?.takeIf { list -> list.any { it.key == channel.key } }
-        ?: listOf(channel)
+    groups.values.firstOrNull { list -> list.any { it.key == channel.key } } ?: listOf(channel)
