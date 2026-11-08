@@ -46,6 +46,7 @@ object NflPicks {
         val winner: String,
         val winProb: Double,
         val modelHomeMargin: Double,
+        val factors: NflModel.Factors,
         val marketHomeMargin: Double?,
         val marketHomeProb: Double?,
         val totalLine: Double?,
@@ -145,7 +146,7 @@ object NflPicks {
                     game = g, espnId = espnId,
                     winner = if (home >= 0.5) g.home.abbr else g.away.abbr,
                     winProb = pickProb,
-                    modelHomeMargin = p.homeMargin, marketHomeMargin = homeLine, marketHomeProb = marketProb,
+                    modelHomeMargin = p.homeMargin, factors = p.factors, marketHomeMargin = homeLine, marketHomeProb = marketProb,
                     totalLine = total, tier = NflModel.tierFor(pickProb), values = values,
                 )
             }

@@ -64,6 +64,11 @@ class NflModelTest {
         // Both played games end level, so only home field, the residual updates and the QB term remain.
         val expected = p[1].homeMargin + 2 * NflModel.K * (0 - p[1].homeMargin) - NflModel.BACKUP_QB
         assertEquals(expected, p[2].homeMargin, 1e-9)
+        assertEquals(-NflModel.BACKUP_QB, p[2].factors.quarterback, 1e-9)
+    }
+
+    @Test fun factorsAlwaysAddUpToTheMargin() {
+        NflModel.replay(real).forEach { assertEquals(it.homeMargin, it.factors.total, 1e-9) }
     }
 
     @Test fun predictionsNeverSeeLaterGames() {

@@ -68,7 +68,12 @@ object NflModel {
         val played: Boolean get() = result != null
     }
 
-    data class Prediction(val row: Row, val homeMargin: Double) {
+    /** The model's home margin, broken into what produced it (points, home side positive). */
+    data class Factors(val strength: Double, val homeField: Double, val rest: Double, val quarterback: Double) {
+        val total: Double get() = strength + homeField + rest + quarterback
+    }
+
+    data class Prediction(val row: Row, val homeMargin: Double, val factors: Factors = Factors(homeMargin, 0.0, 0.0, 0.0)) {
         val homeWinProb: Double get() = winProb(homeMargin)
     }
 
@@ -227,9 +232,14 @@ object NflModel {
             val rh = ratings[r.home] ?: 0.0
             val ra = ratings[r.away] ?: 0.0
             val restEdge = ((r.homeRest ?: 7) - (r.awayRest ?: 7)).coerceIn(-7, 7) / 7.0
-            val margin = rh - ra + (if (r.neutral) 0.0 else HOME_FIELD) + REST * restEdge -
-                qbPenalty(r.home, r.homeQb) + qbPenalty(r.away, r.awayQb)
-            out += Prediction(r, margin)
+            val factors = Factors(
+                strength = rh - ra,
+                homeField = if (r.neutral) 0.0 else HOME_FIELD,
+                rest = REST * restEdge,
+                quarterback = -qbPenalty(r.home, r.homeQb) + qbPenalty(r.away, r.awayQb),
+            )
+            val margin = factors.total
+            out += Prediction(r, margin, factors)
             val result = r.result ?: continue
             val delta = K * (result - margin).coerceIn(-ERROR_CAP, ERROR_CAP)
             ratings[r.home] = rh + delta

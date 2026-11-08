@@ -71,7 +71,9 @@ fun NflHub(board: NflPicks.Board?, use24h: Boolean, onOpen: (Sports.Game) -> Uni
                 items(board.picks, key = { it.espnId }) { pick ->
                     SlateRow(
                         pick, use24h, selected = pick.espnId == selected.espnId,
-                        props = board.props.count { it.espnGame == pick.espnId },
+                        props = board.props.count { l ->
+                            l.espnGame == pick.espnId && (NflProps.playsFor(l.player, pick.game.home.abbr) || NflProps.playsFor(l.player, pick.game.away.abbr))
+                        },
                         onFocus = { selectedId = pick.espnId },
                         onClick = { onOpen(pick.game) },
                     )
@@ -115,10 +117,10 @@ private fun SlateRow(pick: NflPicks.Pick, use24h: Boolean, selected: Boolean, pr
 private fun MatchupPane(pick: NflPicks.Pick, board: NflPicks.Board, use24h: Boolean, modifier: Modifier) {
     val g = pick.game
     val leans = board.props.filter { it.espnGame == pick.espnId }
-    Column(modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // Matchup hero.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TeamLogo(g.away.logo, g.away.name, size = 64.dp)
+            TeamLogo(g.away.logo, g.away.name, size = 52.dp)
             Column(Modifier.padding(horizontal = 18.dp)) {
                 Text("${g.away.name}  at  ${g.home.name}", style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
@@ -126,11 +128,11 @@ private fun MatchupPane(pick: NflPicks.Pick, board: NflPicks.Board, use24h: Bool
                     style = MaterialTheme.typography.labelMedium, color = Edge.Dim, maxLines = 1,
                 )
             }
-            TeamLogo(g.home.logo, g.home.name, size = 64.dp)
+            TeamLogo(g.home.logo, g.home.name, size = 52.dp)
         }
 
-        // The pick, and how it compares with the market.
-        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+        // The pick, what built it, and how it compares with the market: one instrument row.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(30.dp)) {
             Column {
                 Text("PICK", style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp), color = Edge.Faint)
                 Row(verticalAlignment = Alignment.Bottom) {
@@ -138,16 +140,17 @@ private fun MatchupPane(pick: NflPicks.Pick, board: NflPicks.Board, use24h: Bool
                     Spacer(Modifier.width(10.dp))
                     Text(pct(pick.winProb), style = MaterialTheme.typography.headlineSmall, color = Edge.Accent, fontWeight = FontWeight.Bold)
                 }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    pick.tier?.let { Pill(it.label.uppercase(), color = Edge.Accent) }
+                    Text(
+                        "Total ${pick.totalLine?.let(NflPicks::trim) ?: "—"}",
+                        style = MaterialTheme.typography.labelMedium, color = Edge.Dim,
+                    )
+                }
             }
-            pick.tier?.let { Pill(it.label.uppercase(), color = Edge.Accent) }
-            Stat("MODEL LINE", NflPicks.lineText(pick.modelHomeMargin, g.home.abbr, g.away.abbr))
-            Stat("SPREAD", pick.marketHomeMargin?.let { NflPicks.lineText(it, g.home.abbr, g.away.abbr) } ?: "—")
-            Stat("TOTAL", pick.totalLine?.let(NflPicks::trim) ?: "—")
-            Stat(
-                "MARKET",
-                pick.marketHomeProb?.let { home -> if (pick.winner == g.home.abbr) pct(home) else pct(1 - home) }?.let { "${pick.winner} $it" } ?: "—",
-            )
+            ModelVsMarket(pick, Modifier.weight(1f))
         }
+        WhyBars(pick, Modifier.fillMaxWidth())
 
         if (pick.values.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -174,11 +177,73 @@ private fun MatchupPane(pick: NflPicks.Pick, board: NflPicks.Board, use24h: Bool
         // Both sides' props, side by side.
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
             for (team in listOf(g.away, g.home)) {
-                TeamProps(team, leans.filter { NflProps.playsFor(it.player, team.abbr) }.take(5), Modifier.weight(1f))
+                TeamProps(team, leans.filter { NflProps.playsFor(it.player, team.abbr) }.take(3), Modifier.weight(1f))
             }
         }
 
         TrackRecordLine(board)
+    }
+}
+
+/** What built the model's line: four diverging bars in a 2×2 grid (home side to the right). */
+@Composable
+private fun WhyBars(pick: NflPicks.Pick, modifier: Modifier) {
+    val g = pick.game
+    val f = pick.factors
+    val cells = listOf("Team strength" to f.strength, "Home field" to f.homeField, "Rest" to f.rest, "Quarterback" to f.quarterback)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("WHY  ·  POINTS TOWARD ${g.away.abbr} ←  → ${g.home.abbr}", style = MaterialTheme.typography.labelSmall, color = Edge.Faint)
+        cells.chunked(2).forEach { pair ->
+            Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                pair.forEach { (label, v) -> WhyCell(label, v, Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WhyCell(label: String, v: Double, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = Edge.Dim, modifier = Modifier.weight(1f), maxLines = 1)
+            Text(if (kotlin.math.abs(v) < 0.05) "0" else String.format(Locale.US, "%+.1f", v), style = MaterialTheme.typography.labelMedium, color = Edge.Text)
+        }
+        // ±10 points fills one half; bigger values pin to the edge.
+        val share = (kotlin.math.abs(v) / 10.0).coerceAtMost(1.0).toFloat()
+        Row(Modifier.fillMaxWidth().height(6.dp)) {
+            Box(Modifier.weight(1f).fillMaxHeight().background(Edge.Line.copy(alpha = 0.35f)), contentAlignment = Alignment.CenterEnd) {
+                if (v < 0) Box(Modifier.fillMaxWidth(share).fillMaxHeight().background(Edge.Dim))
+            }
+            Box(Modifier.width(2.dp).fillMaxHeight().background(Edge.Text.copy(alpha = 0.5f)))
+            Box(Modifier.weight(1f).fillMaxHeight().background(Edge.Line.copy(alpha = 0.35f)), contentAlignment = Alignment.CenterStart) {
+                if (v > 0) Box(Modifier.fillMaxWidth(share).fillMaxHeight().background(Edge.Accent))
+            }
+        }
+    }
+}
+
+/** Where the model sits against the market line, and what that gap is worth. */
+@Composable
+private fun ModelVsMarket(pick: NflPicks.Pick, modifier: Modifier) {
+    val g = pick.game
+    val market = pick.marketHomeMargin
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("MODEL VS MARKET", style = MaterialTheme.typography.labelSmall, color = Edge.Faint)
+        if (market == null) {
+            Text("No market line yet.", style = MaterialTheme.typography.labelMedium, color = Edge.Faint)
+            return@Column
+        }
+        val gap = kotlin.math.abs(pick.modelHomeMargin - market)
+        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+            Stat("MODEL", NflPicks.lineText(pick.modelHomeMargin, g.home.abbr, g.away.abbr))
+            Stat("MARKET", NflPicks.lineText(market, g.home.abbr, g.away.abbr))
+            pick.marketHomeProb?.let { home -> Stat("MKT WIN", "${pick.winner} ${pct(if (pick.winner == g.home.abbr) home else 1 - home)}") }
+        }
+        Text(
+            if (gap >= 2.0) String.format(Locale.US, "%.1f pts apart. Gaps like this lost on unseen seasons, so the pick follows the market.", gap)
+            else "Close to the market, the sharper number. The pick follows it.",
+            style = MaterialTheme.typography.labelMedium, color = Edge.Dim, maxLines = 3,
+        )
     }
 }
 
@@ -227,22 +292,16 @@ private fun TeamProps(team: Sports.Team, leans: List<NflProps.Lean>, modifier: M
 @Composable
 private fun TrackRecordLine(board: NflPicks.Board) {
     val parts = buildList {
-        board.backtest?.let { add("Model ${pct(it.winnerHitRate)} winners ${it.firstSeason}–${it.lastSeason}") }
+        board.backtest?.let { add("model ${pct(it.winnerHitRate)} of winners") }
         board.tiers.forEach { t -> t.holdout.hitRate?.let { add("${t.tier.label} ${pct(it)} (${t.holdout.graded})") } }
         board.rules.forEach { r -> r.holdout.hitRate?.let { add("${r.rule.label} ${pct(it)} (${r.holdout.graded})") } }
         board.log.record.let { if (it.graded > 0) add("Logged ${it.wins}-${it.losses}-${it.pushes}") }
         board.propLog?.record?.let { if (it.graded > 0) add("Props ${it.wins}-${it.losses}-${it.pushes}") }
     }
-    Column {
-        Text(
-            "Since ${NflModel.HOLDOUT_FROM}, unseen seasons: " + parts.joinToString("  ·  "),
-            style = MaterialTheme.typography.labelSmall, color = Edge.Dim, maxLines = 3,
-        )
-        Text(
-            "Props are projection vs line, graded live. Informational only. Data: nflverse (CC-BY 4.0), ESPN, Open-Meteo.",
-            style = MaterialTheme.typography.labelSmall, color = Edge.Faint, maxLines = 1,
-        )
-    }
+    Text(
+        "Unseen seasons since ${NflModel.HOLDOUT_FROM}: " + parts.joinToString("  ·  ") + ".  Props graded live; informational only.",
+        style = MaterialTheme.typography.labelSmall, color = Edge.Dim, maxLines = 2,
+    )
 }
 
 private fun pct(p: Double): String = "${(p * 100).roundToInt()}%"
