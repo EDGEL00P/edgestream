@@ -26,7 +26,13 @@ import com.edgestream.tv.data.SportsReels
  */
 @OptIn(UnstableApi::class)
 @Composable
-fun VideoBackdrop(reels: List<SportsReels.Reel>, sound: Boolean, modifier: Modifier = Modifier) {
+fun VideoBackdrop(
+    reels: List<SportsReels.Reel>,
+    sound: Boolean,
+    modifier: Modifier = Modifier,
+    /** Told which clip starts playing, for captions and transitions. */
+    onClip: ((SportsReels.Reel) -> Unit)? = null,
+) {
     val ctx = LocalContext.current
     val player = remember(reels) {
         ExoPlayer.Builder(ctx).build().apply {
@@ -36,7 +42,7 @@ fun VideoBackdrop(reels: List<SportsReels.Reel>, sound: Boolean, modifier: Modif
             videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
             trackSelectionParameters = trackSelectionParameters.buildUpon().setMaxVideoSize(1920, 1080).build()
             setMediaItems(reels.map { r ->
-                MediaItem.Builder().setUri(r.stream).apply { if (r.stream.endsWith(".m3u8")) setMimeType(MimeTypes.APPLICATION_M3U8) }.build()
+                MediaItem.Builder().setUri(r.stream).setMediaId(r.id).apply { if (r.stream.endsWith(".m3u8")) setMimeType(MimeTypes.APPLICATION_M3U8) }.build()
             })
         }
     }
@@ -49,8 +55,22 @@ fun VideoBackdrop(reels: List<SportsReels.Reel>, sound: Boolean, modifier: Modif
                 if (player.mediaItemCount > 1) { player.seekToNextMediaItem(); player.prepare() }
             }
         }
+        // The first clip's transition fires before anyone listens, so a drawn frame also counts;
+        // each clip is reported once.
+        var reported: String? = null
+        fun report() {
+            val id = player.currentMediaItem?.mediaId ?: return
+            if (id == reported) return
+            reported = id
+            reels.firstOrNull { it.id == id }?.let { onClip?.invoke(it) }
+        }
+        val clips = object : Player.Listener {
+            override fun onMediaItemTransition(item: MediaItem?, reason: Int) = report()
+            override fun onRenderedFirstFrame() = report()
+        }
         player.addListener(skipBroken)
-        onDispose { player.removeListener(skipBroken); player.release() }
+        player.addListener(clips)
+        onDispose { player.removeListener(skipBroken); player.removeListener(clips); player.release() }
     }
     LifecycleStartEffect(player) {
         player.prepare()

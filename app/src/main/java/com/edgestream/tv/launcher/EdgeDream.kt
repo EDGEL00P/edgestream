@@ -1,6 +1,21 @@
 package com.edgestream.tv.launcher
 
 import android.service.dreams.DreamService
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.mutableStateOf
+import com.edgestream.tv.data.Sports
+import com.edgestream.tv.data.SportsReels
+import com.edgestream.tv.ui.glass.VideoBackdrop
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -49,26 +64,30 @@ import com.edgestream.tv.ui.components.WeatherGlyph
 import kotlinx.coroutines.delay
 
 /**
- * EdgeStream as the TV's screen saver: a quiet, near-black ambient screen — the mark drifting
- * slowly, the time large and dim, the weather underneath. Any key or the Home button wakes it;
- * nothing animates fast enough to worry an OLED.
+ * EdgeStream as the TV's screen saver: real game highlights with the time, weather and live
+ * scores over them. Any key or the Home button wakes it.
  */
-class EdgeDream : DreamService(), LifecycleOwner, ViewModelStoreOwner {
+class EdgeDream : DreamService(), LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
 
     private val registry = LifecycleRegistry(this)
     private val store = ViewModelStore()
+    private val savedState = SavedStateRegistryController.create(this)
 
     override val lifecycle: Lifecycle get() = registry
     override val viewModelStore: ViewModelStore get() = store
+    override val savedStateRegistry: SavedStateRegistry get() = savedState.savedStateRegistry
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        // Compose needs a saved-state owner on the view tree; it must be restored before the
+        // lifecycle leaves INITIALIZED.
+        savedState.performRestore(null)
         setInteractive(false)
         isFullscreen = true
-        isScreenBright = false
         val view = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@EdgeDream)
             setViewTreeViewModelStoreOwner(this@EdgeDream)
+            setViewTreeSavedStateRegistryOwner(this@EdgeDream)
             setContent { EdgeTheme { DreamScreen() } }
         }
         setContentView(view)
@@ -92,65 +111,119 @@ class EdgeDream : DreamService(), LifecycleOwner, ViewModelStoreOwner {
     }
 }
 
-/** The screensaver itself: no focusables, minimal motion, real data only. */
+/**
+ * The screensaver: real ESPN highlights full screen, muted, each one fading up out of black
+ * with its headline as a lower third; a big clock, the weather and live scores over a soft
+ * shade. The overlay drifts a little every minute so nothing sits still on an OLED. With no
+ * highlights (offline), the ambient room shows instead.
+ */
 @Composable
 private fun DreamScreen() {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
-        while (true) { now = System.currentTimeMillis(); delay(30_000) }
+        while (true) { now = System.currentTimeMillis(); delay(15_000) }
     }
 
-    var weather by remember { androidx.compose.runtime.mutableStateOf<PublicApis.Weather?>(null) }
+    var weather by remember { mutableStateOf<PublicApis.Weather?>(null) }
     LaunchedEffect(Unit) {
         weather = runCatching { PublicApis.location() }
             .getOrNull()?.let { loc -> runCatching { PublicApis.weather(loc) }.getOrNull() }
     }
 
-    val drift by androidx.compose.animation.core.rememberInfiniteTransition(label = "dream")
-        .animateFloat(1f, 1.045f, androidx.compose.animation.core.infiniteRepeatable(
-            androidx.compose.animation.core.tween(22_000),
-            androidx.compose.animation.core.RepeatMode.Reverse,
-        ), label = "drift")
+    var reels by remember { mutableStateOf<List<SportsReels.Reel>>(emptyList()) }
+    LaunchedEffect(Unit) { reels = SportsReels.load() }
 
-    AmbientBackground(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.35f)))))
-        Column(
-            Modifier.align(Alignment.Center),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Box(
-                Modifier.graphicsLayer { scaleX = drift; scaleY = drift }
-                    .size(64.dp),
-            ) {
-                com.edgestream.tv.ui.components.EdgeMark(Modifier.fillMaxSize())
+    var games by remember { mutableStateOf(Sports.cachedGames().orEmpty()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            runCatching { Sports.games() }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { games = it }
+            delay(120_000)
+        }
+    }
+    val live = games.filter { it.state == Sports.State.LIVE }.take(4)
+
+    // Each new clip rises out of black, and its headline slides in a beat later.
+    var clip by remember { mutableStateOf<SportsReels.Reel?>(null) }
+    val veil = remember { Animatable(1f) }
+    val caption = remember { Animatable(0f) }
+    LaunchedEffect(clip) {
+        if (clip == null) return@LaunchedEffect
+        caption.snapTo(0f)
+        veil.snapTo(1f)
+        veil.animateTo(0f, tween(1400))
+        caption.animateTo(1f, tween(900))
+    }
+
+    // Burn-in guard: the whole overlay walks a small square, one step a minute.
+    val step = ((now / 60_000) % 4).toInt()
+    val driftX = listOf(0, 14, 14, 0)[step].dp
+    val driftY = listOf(0, 0, 10, 10)[step].dp
+
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        if (reels.isEmpty()) {
+            AmbientBackground(Modifier.fillMaxSize())
+        } else {
+            VideoBackdrop(reels, sound = false, modifier = Modifier.fillMaxSize(), onClip = { clip = it })
+        }
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (reels.isEmpty()) 0f else veil.value)))
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(0f to Color.Transparent, 0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.82f)),
+            ),
+        )
+        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Color.Black.copy(alpha = 0.55f), 0.5f to Color.Transparent)))
+        // Scores sit top right, often over bright ice or sky: shade from the top too.
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.7f), 0.4f to Color.Transparent)))
+
+        Box(Modifier.fillMaxSize().padding(horizontal = 64.dp, vertical = 40.dp).offset(driftX, driftY)) {
+            // Live scores, top right.
+            if (live.isNotEmpty()) {
+                Column(Modifier.align(Alignment.TopEnd), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(8.dp).background(Edge.Live, CircleShape))
+                        Spacer(Modifier.width(8.dp))
+                        Text("LIVE", style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp), color = Edge.Live)
+                    }
+                    live.forEach { g ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "${g.away.abbr} ${g.away.score ?: "–"}  ${g.home.abbr} ${g.home.score ?: "–"}",
+                                style = MaterialTheme.typography.headlineSmall, color = Color.White,
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(g.detail, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f), maxLines = 1)
+                        }
+                    }
+                }
             }
-            Text(
-                Format.time(now, use24h = true),
-                style = androidx.compose.material3.MaterialTheme.typography.displayMedium,
-                color = Edge.Text.copy(alpha = 0.92f),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 28.dp),
-            )
-            Text(
-                Format.day(now),
-                style = androidx.compose.material3.MaterialTheme.typography.labelLarge.copy(letterSpacing = 2.sp),
-                color = Edge.Dim,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-            weather?.let { w ->
-                Row(
-                    Modifier.padding(top = 18.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
+
+            // Clock, date and weather, bottom left.
+            Column(Modifier.align(Alignment.BottomStart)) {
+                Text(
+                    Format.time(now, use24h = false),
+                    style = MaterialTheme.typography.displayMedium.copy(fontSize = 120.sp, lineHeight = 112.sp), color = Color.White,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(java.text.SimpleDateFormat("EEEE d MMMM", java.util.Locale.getDefault()).format(now).uppercase(), style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 3.sp), color = Color.White.copy(alpha = 0.85f))
+                    weather?.let { w ->
+                        Spacer(Modifier.width(18.dp))
+                        WeatherGlyph(w.code, glyphSize = 20.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("${w.tempC.toInt()}°  ${w.city}", style = MaterialTheme.typography.labelLarge, color = Color.White.copy(alpha = 0.85f), maxLines = 1)
+                    }
+                }
+            }
+
+            // The clip's real headline, bottom right, sliding in.
+            clip?.let { c ->
+                Column(
+                    Modifier.align(Alignment.BottomEnd).widthIn(max = 440.dp)
+                        .graphicsLayer { alpha = caption.value; translationX = (1f - caption.value) * 40.dp.toPx() },
+                    horizontalAlignment = Alignment.End,
                 ) {
-                    WeatherGlyph(w.code, glyphSize = 20.dp)
-                    Spacer(Modifier.size(10.dp))
-                    Text(
-                        "${w.tempC.toInt()}°C  ·  ${w.description}  ·  ${w.city}",
-                        style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
-                        color = Edge.Dim,
-                        maxLines = 1,
-                    )
+                    Text("HIGHLIGHT  ·  ESPN", style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp), color = Edge.Accent)
+                    Box(Modifier.padding(vertical = 6.dp).width(48.dp).height(3.dp).background(Edge.Accent))
+                    Text(c.title, style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.End, maxLines = 3)
                 }
             }
         }
