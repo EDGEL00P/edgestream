@@ -79,13 +79,15 @@ object Rebrands {
         rule("Space Channel", "CTV Sci-Fi Channel"),
     )
 
+    private val SPACES = Regex("\\s+")
+
     /** Today's name for [name], or [name] unchanged. */
     fun current(name: String): String {
         val n = name.trim()
         for ((re, replacement) in RULES) {
             val m = re.matchEntire(n) ?: continue
             return m.groupValues.drop(1).foldIndexed(replacement) { i, acc, g -> acc.replace("$${i + 1}", g) }
-                .replace(Regex("\\s+"), " ").trim()
+                .replace(SPACES, " ").trim()
         }
         return n
     }

@@ -199,7 +199,9 @@ class ChannelIdentities internal constructor(rows: List<Pair<ChannelIdentity, Li
 
         fun init(context: Context, scope: kotlinx.coroutines.CoroutineScope) {
             if (shared.isCompleted) return
-            scope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            // Parse the 1 MB catalogue off the shared CPU pool: it runs once at startup and the lineup
+            // awaits it, so keeping it off Default avoids starving channel cleaning.
+            scope.launch(kotlinx.coroutines.Dispatchers.IO.limitedParallelism(1)) {
                 val loaded = runCatching {
                     context.assets.open("channel_catalog.json").use { parse(InputStreamReader(it, Charsets.UTF_8)) }
                 }.getOrElse { e ->

@@ -24,7 +24,7 @@ class ChannelPadTest {
         val scope = CoroutineScope(coroutineContext + Job())
         val tuned = mutableListOf<Int>()
         try {
-            block(ChannelPad(scope, delayMs) { tuned += it }, tuned)
+            block(ChannelPad(scope, commitDelayMs = delayMs, onTune = { tuned += it; true }), tuned)
         } finally {
             scope.cancel()
         }

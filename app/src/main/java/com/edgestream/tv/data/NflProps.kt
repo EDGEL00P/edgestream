@@ -85,7 +85,7 @@ object NflProps {
         val players = cached(dir, "nflverse-players.csv", PLAYERS_URL, 24 * HOUR, now) ?: return@withContext null
         val current = cached(dir, "nflverse-stats-$season.csv", statsUrl(season), 6 * HOUR, now)
         val last = cached(dir, "nflverse-stats-${season - 1}.csv", statsUrl(season - 1), 24 * HOUR, now)
-        withContext(Dispatchers.Default) { buildBook(players, listOfNotNull(last, current)) }
+        withContext(NflPicks.background) { buildBook(players, listOfNotNull(last, current)) }
     }
 
     private suspend fun cached(dir: File, name: String, url: String, staleMs: Long, now: Long): String? {

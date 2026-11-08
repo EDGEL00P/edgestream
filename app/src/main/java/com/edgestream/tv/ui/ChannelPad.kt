@@ -27,12 +27,14 @@ fun buildLcnIndex(channels: List<ChannelEntity>): Map<Int, ChannelEntity> {
 /**
  * Universal-remote number entry: digits collect for [commitDelayMs] after the last press, then
  * [onTune] gets the number. Lives in the view model so it survives recreation and can be tested
- * without Compose; only the OSD composable collects [state].
+ * without Compose; only the OSD composable collects [state]. [onTune] returns true when the
+ * channel was tuned; if the lineup/index is still loading, the entry is kept and retried.
  */
 class ChannelPad(
     private val scope: CoroutineScope,
     private val commitDelayMs: Long = 1_800,
-    private val onTune: (Int) -> Unit,
+    private val indexLoading: () -> Boolean = { false },
+    private val onTune: (Int) -> Boolean,
 ) {
     private val _state = MutableStateFlow(PadState())
     val state: StateFlow<PadState> = _state.asStateFlow()
@@ -48,26 +50,39 @@ class ChannelPad(
     }
 
     fun append(digit: Char) {
+        pendingRetries = 0
         val digits = (_state.value.digits + digit).take(4)
         _state.value = PadState(digits, lookup(digits))
-        autoCommit?.cancel()
-        autoCommit = scope.launch {
-            delay(commitDelayMs)
-            commit()
-        }
+        scheduleCommit()
     }
 
     fun backspace() {
+        pendingRetries = 0
         val digits = _state.value.digits.dropLast(1)
         _state.value = PadState(digits, lookup(digits))
-        if (digits.isEmpty()) autoCommit?.cancel()
+        if (digits.isEmpty()) autoCommit?.cancel() else scheduleCommit()
     }
+
+    private var pendingRetries = 0
 
     fun commit() {
         autoCommit?.cancel()
-        val number = _state.value.digits.toIntOrNull()
+        val digits = _state.value.digits
+        val number = digits.toIntOrNull() ?: run { _state.value = PadState(); pendingRetries = 0; return }
+        val tuned = onTune(number)
+        if (!tuned && indexLoading() && pendingRetries < 45) {
+            // Lineup still loading: keep the number visible and retry shortly (caps at ~45s).
+            pendingRetries++
+            scheduleCommit(1_000)
+            return
+        }
+        pendingRetries = 0
         _state.value = PadState()
-        number?.let(onTune)
+    }
+
+    private fun scheduleCommit(ms: Long = commitDelayMs) {
+        autoCommit?.cancel()
+        autoCommit = scope.launch { delay(ms); commit() }
     }
 
     private fun lookup(digits: String): ChannelEntity? = digits.toIntOrNull()?.let { index[it] }

@@ -263,6 +263,9 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
                 true,
             )
             .setHandleAudioBecomingNoisy(true)
+            // TV remote seeking: short/long jumps map cleanly to back/forward on D-pad controls.
+            .setSeekBackIncrementMs(10_000)
+            .setSeekForwardIncrementMs(30_000)
             .build()
             .also { player ->
                 // These are player-level settings; applying them here keeps ExoPlayer off the
@@ -379,13 +382,21 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
 
     fun stop() {
         if (!exoLazy.isInitialized()) return
+        main.removeCallbacks(stallWatchdog)
         exo.stop()
         exo.clearMediaItems()
+        exo.clearVideoSurface()
+        session?.setActive(false)
         _state.value = PlaybackState()
     }
 
     /** App hidden: stop() keeps the playlist but frees the decoder (pause() would hold it). */
-    fun releaseDecoder() { if (exoLazy.isInitialized()) exo.stop() }
+    fun releaseDecoder() {
+        if (!exoLazy.isInitialized()) return
+        main.removeCallbacks(stallWatchdog)
+        exo.clearVideoSurface()
+        exo.stop()
+    }
     fun resume() {
         if (_state.value.url == null) return
         if (exo.playbackState == Player.STATE_IDLE) exo.prepare()

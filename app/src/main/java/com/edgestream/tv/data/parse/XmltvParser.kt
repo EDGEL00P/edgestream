@@ -140,11 +140,16 @@ object XmltvParser {
         return 0
     }
 
+    private val BRACKETS = Regex("""\[[^]]*]|\([^)]*\)""")
+    private val COUNTRY_PREFIX = Regex("""^[a-z]{2,3}\s*[|:\-]\s*""")
+    private val QUALITY_TAGS = Regex("""\b(uhd|fhd|hd|sd|4k|hevc|h265|1080p?|720p?|backup|vip)\b""")
+    private val NON_ALNUM = Regex("""[^a-z0-9]+""")
+
     /** Lower-case, strip punctuation, quality tags and country prefixes for fuzzy name matching. */
     fun normaliseName(name: String): String =
         name.lowercase()
-            .replace(Regex("""\[[^]]*]|\([^)]*\)"""), " ")
-            .replace(Regex("""^[a-z]{2,3}\s*[|:\-]\s*"""), "")
-            .replace(Regex("""\b(uhd|fhd|hd|sd|4k|hevc|h265|1080p?|720p?|backup|vip)\b"""), " ")
-            .replace(Regex("""[^a-z0-9]+"""), "")
+            .replace(BRACKETS, " ")
+            .replace(COUNTRY_PREFIX, "")
+            .replace(QUALITY_TAGS, " ")
+            .replace(NON_ALNUM, "")
 }

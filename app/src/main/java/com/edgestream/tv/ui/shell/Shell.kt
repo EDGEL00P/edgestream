@@ -5,8 +5,8 @@ import com.edgestream.tv.ui.Screen
 
 /** Everything the dock offers: four utility icons, then the five sections. */
 enum class Tile(val label: String, val utility: Boolean) {
-    SEARCH("Search", true), SETTINGS("Settings", true), PHONE("Phone Remote", true), APPS("Apps", true),
-    LIVE("TV Guide", false), SPORTS("Sports", false), ODDS("Odds", false), MOVIES("On Demand", false), WEATHER("Weather", false), CALENDAR("Planner", false),
+    SEARCH("Search", true), SETTINGS("Settings", true), PHONE("Remote", true), APPS("Apps", true),
+    LIVE("Guide", false), SPORTS("Sports", false), ODDS("Odds", false), MOVIES("Library", false), WEATHER("Weather", false), CALENDAR("Planner", false),
 }
 
 val DEFAULT_TILE = Tile.SPORTS

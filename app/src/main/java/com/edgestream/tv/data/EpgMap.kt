@@ -101,17 +101,23 @@ class EpgMap(val guides: List<String>, private val channels: Map<String, List<En
             }
         }.getOrElse { EpgMap(emptyList(), emptyMap()) }
 
+        private val GUIDE_US = Regex("""(?:^|[/_])us(?:_locals)?\d*\.xml""")
+        private val GUIDE_UK = Regex("""(?:^|[/_])(?:uk|gb)\d*\.xml""")
+        private val GUIDE_CA = Regex("""(?:^|[/_])ca\d*\.xml""")
+        private val GUIDE_AU = Regex("""(?:^|[/_])au\d*\.xml""")
+        private val GUIDE_NZ = Regex("""(?:^|[/_])nz\d*\.xml""")
+        private val GUIDE_IE = Regex("""(?:^|[/_])ie\d*\.xml""")
+
         /** "epg_ripper_UK1.xml.gz" -> uk, "epg_US.xml.gz" -> us, "i.mjh.nz/au/Sydney" -> au. */
         fun countryOfGuide(url: String): String? {
             val u = url.lowercase()
-            fun code(tag: String) = Regex("""(?:^|[/_])${tag}\d*\.xml""").containsMatchIn(u)
             return when {
-                Regex("""(?:^|[/_])us(?:_locals)?\d*\.xml""").containsMatchIn(u) -> "us"
-                code("uk") || code("gb") -> "uk"
-                code("ca") -> "ca"
-                code("au") -> "au"
-                code("nz") -> "nz"
-                code("ie") -> "ie"
+                GUIDE_US.containsMatchIn(u) -> "us"
+                GUIDE_UK.containsMatchIn(u) -> "uk"
+                GUIDE_CA.containsMatchIn(u) -> "ca"
+                GUIDE_AU.containsMatchIn(u) -> "au"
+                GUIDE_NZ.containsMatchIn(u) -> "nz"
+                GUIDE_IE.containsMatchIn(u) -> "ie"
                 "/au/" in u -> "au"
                 "/nz/" in u -> "nz"
                 else -> null
@@ -152,6 +158,10 @@ object NameListings {
     private val LOOP_GROUP = Regex("""CINEMANIA|PLAY KIDZ|24/7|ON-DEMAND|SEREIS|SERIES""", RegexOption.IGNORE_CASE)
     private val LOOP_PREFIX = Regex("""^\s*(24/7(?:-[A-Z]{2})?|[A-Z]{2})\s*[|:\-]\s*(?:24/7\s*[|:\-]?\s*)?""", RegexOption.IGNORE_CASE)
     private val QUALITY = Regex("""\b(UHD|FHD|HD|SD|HEVC|4K)\b""", RegexOption.IGNORE_CASE)
+    private val BRACKETS = Regex("""\[[^]]*]""")
+    private val BRAND_PREFIX = Regex("""^(PLAY KIDZ|CINEMANIA)\s+""", RegexOption.IGNORE_CASE)
+    private val SPACES = Regex("""\s+""")
+    private val EVENT_PAREN = Regex("""\s*\(.*$""")
 
     /** Provider event times are US Eastern (their "2:55AM ET" labels match the bracketed times). */
     private val EASTERN: ZoneId = ZoneId.of("America/New_York")
@@ -194,9 +204,9 @@ object NameListings {
     /** "24/7-EN - BATMAN 1966" -> "Batman 1966"; "US| PLAY KIDZ SPIDEY HD" -> "Spidey". */
     fun showName(name: String): String {
         var n = LOOP_PREFIX.replaceFirst(name, "")
-        n = n.replace(Regex("""\[[^]]*]"""), " ").replace(QUALITY, " ")
-            .replace(Regex("""^(PLAY KIDZ|CINEMANIA)\s+""", RegexOption.IGNORE_CASE), "")
-        n = n.trim(' ', '-', '|', ':').replace(Regex("""\s+"""), " ")
+        n = n.replace(BRACKETS, " ").replace(QUALITY, " ")
+            .replace(BRAND_PREFIX, "")
+        n = n.trim(' ', '-', '|', ':').replace(SPACES, " ")
         // Provider names are often all caps; title-case those, leave mixed case alone.
         return if (n == n.uppercase()) n.lowercase().split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.titlecase(Locale.ROOT) } } else n
     }
@@ -228,5 +238,5 @@ object NameListings {
     }
 
     /** "Soccer: Getafe vs. Sevilla (Getafe vs. Sevilla (ESP))" -> "Soccer: Getafe vs. Sevilla"; "_" -> "·". */
-    private fun clean(s: String) = s.replace(Regex("""\s*\(.*$"""), "").replace(" _ ", " · ").replace('_', ' ').trim()
+    private fun clean(s: String) = s.replace(EVENT_PAREN, "").replace(" _ ", " · ").replace('_', ' ').trim()
 }

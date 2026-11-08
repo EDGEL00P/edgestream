@@ -45,9 +45,9 @@ class SecondPlayer(context: Context) {
     }
 
     /** App hidden: free the decoder but keep the channel, so [resume] picks it back up. */
-    fun stop() = exo.stop()
+    fun stop() { exo.clearVideoSurface(); exo.stop() }
 
     fun resume() { exo.prepare(); exo.playWhenReady = true }
 
-    fun release() = exo.release()
+    fun release() { exo.clearVideoSurface(); exo.release() }
 }

@@ -70,7 +70,7 @@ fun VideoBackdrop(
         }
         player.addListener(skipBroken)
         player.addListener(clips)
-        onDispose { player.removeListener(skipBroken); player.removeListener(clips); player.release() }
+        onDispose { player.removeListener(skipBroken); player.removeListener(clips); player.clearVideoSurface(); player.release() }
     }
     LifecycleStartEffect(player) {
         player.prepare()

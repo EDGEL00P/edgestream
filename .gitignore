@@ -20,3 +20,14 @@ exp_out*.json
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Vibe Code Assistant - AI Instructions & Prompts
+# Auto-generated AI guidance files - excluded from version control
+.github/instructions/
+.github/prompts/
+how-to-guides/
+.github/copilot-instructions.md
+
+# Note: These files enhance GitHub Copilot with project-specific guidance.
+# They are excluded to keep your repository clean and focused on your code.
+# The extension will recreate them as needed when analyzing code.

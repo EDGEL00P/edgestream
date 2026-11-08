@@ -21,6 +21,8 @@ import kotlin.math.roundToInt
 object NflPicks {
     const val GAMES_URL = "https://github.com/nflverse/nflverse-data/releases/download/schedules/games.csv"
     private const val CACHE_FILE = "nflverse-games.csv"
+    /** NFL parsing and model building share one background thread, so they never crowd out the UI's work. */
+    internal val background = Dispatchers.Default.limitedParallelism(1)
     /** The weekly re-tune's output; only published when it beats the previous numbers on unseen seasons. */
     const val PARAMS_URL = "https://raw.githubusercontent.com/EDGEL00P/edgestream/main/model/nfl-params.json"
     private const val PARAMS_FILE = "nfl-params.json"
@@ -91,9 +93,9 @@ object NflPicks {
                 ?: cache.takeIf(File::isFile)?.readText()
         } ?: return@withContext null
         NflModel.params = loadParams(dir, now)
-        val rows = withContext(Dispatchers.Default) { NflModel.parse(text) }.takeIf { it.isNotEmpty() } ?: return@withContext null
+        val rows = withContext(background) { NflModel.parse(text) }.takeIf { it.isNotEmpty() } ?: return@withContext null
         val book = NflProps.loadBook(dir, rows.maxOf { it.season }, now)
-        withContext(Dispatchers.Default) { build(rows, book) }
+        withContext(background) { build(rows, book) }
     }
 
     /** Published re-tuned numbers (cached a day), else the last good copy, else the built-in ones. */

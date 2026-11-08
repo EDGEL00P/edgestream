@@ -88,9 +88,14 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
         ) { all, (on, regex, englishOnly), favourites ->
             // Grouping and numbering read each channel's catalogue identity: never build the
             // lineup before the catalogue has loaded, or numbers cache their fallback guess.
+            fun t() = android.os.SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime()
+            val trace = com.edgestream.tv.data.Sports.traceOn
+            if (trace) android.util.Log.d("EdgeStartup", "lineup: ${all.size} channels from db at ${t()} ms")
             com.edgestream.tv.data.ChannelIdentities.await()
+            if (trace) android.util.Log.d("EdgeStartup", "lineup: catalogue ready at ${t()} ms")
             // Language is judged on the raw name, before cleaning strips its "US|"/"FR|" prefix.
             val list = all.filter { repo.keepChannel(it) }
+            if (trace) android.util.Log.d("EdgeStartup", "lineup: ${list.size} kept by language at ${t()} ms")
             val rawByKey = list.associate { it.key to it.name }
             val cleanInfos = HashMap<String, com.edgestream.tv.data.CleanName>(list.size)
             val cleanTitles = HashMap<String, String>(list.size)
@@ -105,8 +110,10 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
                     ch.copy(name = clean.title)
                 }
             }
+            if (trace) android.util.Log.d("EdgeStartup", "lineup: names cleaned at ${t()} ms")
             val deduped = com.edgestream.tv.data.ChannelDedupe.apply(display, favourites.toSet(), cleanTitles)
             val kept = deduped.mapTo(HashSet(deduped.size)) { it.key }
+            if (trace) android.util.Log.d("EdgeStartup", "lineup: ${deduped.size} shown, cleaned at ${t()} ms")
             ChannelCatalog(
                 display = deduped,
                 badges = if (!on) emptyMap() else cleanInfos.filterKeys { it in kept },
@@ -850,7 +857,7 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     /** Universal-remote number entry (101 → BBC 1 HD). */
-    val channelPad = ChannelPad(viewModelScope) { jumpToNumber(it) }
+    val channelPad = ChannelPad(viewModelScope, indexLoading = { channels.value.isEmpty() }) { jumpToNumber(it) }
 
     init {
         viewModelScope.launch { lcnIndex.collect(channelPad::setIndex) }
@@ -873,7 +880,14 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
     /** The nflverse-backed NFL model, rebuilt every 6 h while the Betting board is open. */
     private val nflModel = flow {
         while (true) {
+            fun t() = android.os.SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime()
+            // The lineup comes first: number entry, previews and "Watch on" all wait on it, and the
+            // model's 20 MB parse would otherwise take the CPU it needs at launch. Capped so no
+            // provider (no lineup) never blocks picks.
+            kotlinx.coroutines.withTimeoutOrNull(90_000) { channels.first { it.isNotEmpty() } }
+            if (com.edgestream.tv.data.Sports.traceOn) android.util.Log.d("EdgeStartup", "nfl model: start at ${t()} ms")
             com.edgestream.tv.data.NflPicks.loadModel(app.filesDir)?.let { emit(it) }
+            if (com.edgestream.tv.data.Sports.traceOn) android.util.Log.d("EdgeStartup", "nfl model: done at ${t()} ms")
             delay(6 * 3_600_000L)
         }
     }
@@ -1022,9 +1036,16 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
     /** Channel Up/Down list for a channel started without a browsed list. */
     fun zapListFor(channel: ChannelEntity): List<ChannelEntity> = zapListFor(channel, byGroup.value)
 
-    fun jumpToNumber(number: Int) {
-        val ch = lcnIndex.value[number] ?: return
-        playChannel(ch, zapListFor(ch))
+    fun jumpToNumber(number: Int): Boolean {
+        // Fall back to a direct scan: the LCN index can lag the lineup at launch, or a channel
+        // may only carry the provider's own number.
+        val ch = lcnIndex.value[number]
+            ?: channels.value.firstOrNull { com.edgestream.tv.data.ChannelNumbers.lcn(it) == number }
+            ?: channels.value.firstOrNull { it.number == number }
+        if (com.edgestream.tv.data.Sports.traceOn) {
+            android.util.Log.d("EdgePad", "tune $number -> ${ch?.name ?: "none"} (index=${lcnIndex.value.size} channels=${channels.value.size})")
+        }
+        return if (ch != null) { playChannel(ch, zapListFor(ch)); true } else false
     }
 
     fun playCatchup(channel: ChannelEntity, programme: ProgrammeEntity, startPositionMs: Long = 0) {
@@ -1675,6 +1696,22 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
                 if (fullscreen.value) exitFullscreen()
                 uri.getQueryParameter("q")?.let { searchQuery.value = it }
                 screen.value = Screen.SEARCH
+            }
+            // Parsed voice commands from the Shield remote mic / global search.
+            "command" -> {
+                if (fullscreen.value) exitFullscreen()
+                when (uri.getQueryParameter("action")) {
+                    "tune" -> uri.getQueryParameter("n")?.toIntOrNull()?.let(::tuneNumber)
+                    "watch" -> uri.getQueryParameter("name")?.takeIf { it.isNotBlank() }?.let(::playNamed)
+                    "open" -> Screen.entries.firstOrNull { it.name == uri.getQueryParameter("screen") && it != Screen.GUIDE }?.let { screen.value = it }
+                    "search" -> openSearch(uri.getQueryParameter("q").orEmpty())
+                    "games" -> screen.value = Screen.SPORTS
+                    "team" -> uri.getQueryParameter("name")?.takeIf { it.isNotBlank() }?.let(::openSearch)
+                    "whatson" -> {
+                        val ch = uri.getQueryParameter("channel").orEmpty()
+                        if (ch.isNotBlank()) playNamed(ch) else screen.value = Screen.LIVE
+                    }
+                }
             }
         }
     }

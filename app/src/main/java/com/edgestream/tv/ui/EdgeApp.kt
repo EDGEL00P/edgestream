@@ -264,15 +264,17 @@ fun EdgeApp(vm: AppViewModel = viewModel()) {
         // Real game highlights on Home (photos until then). An open section gets the still photo:
         // broadcast clips carry burned-in scoreboards that read through any shade over lists.
         val preview by vm.preview.collectAsStateWithLifecycle()
+        val multiviewOn by vm.multiview.collectAsStateWithLifecycle()
+        val backdropSound by vm.settings.collectAsStateWithLifecycle() // read .backdropSound at use site via stable local below
+        val backdropSoundOn = backdropSound.backdropSound
         // A live preview replaces the reel (one decoder either way) and only while nothing else plays.
-        val multiviewOn = vm.multiview.collectAsStateWithLifecycle().value != null
-        val previewing = preview?.takeIf { !fullscreen && screen == Screen.HOME && !playback.isPlaying && !multiviewOn }
+        val previewing = preview?.takeIf { !fullscreen && screen == Screen.HOME && !playback.isPlaying && multiviewOn == null }
         if (previewing != null) {
             androidx.compose.runtime.key(previewing.key) {
                 com.edgestream.tv.ui.glass.LivePreview(previewing.streamUrl, onFailed = { vm.preview.value = null }, modifier = Modifier.fillMaxSize())
             }
         } else if (!fullscreen && motionOn && reels.isNotEmpty() && screen == Screen.HOME && !com.edgestream.tv.PressMode.on) {
-            com.edgestream.tv.ui.glass.VideoBackdrop(reels, sound = vm.settings.collectAsStateWithLifecycle().value.backdropSound, modifier = Modifier.fillMaxSize())
+            com.edgestream.tv.ui.glass.VideoBackdrop(reels, sound = backdropSoundOn, modifier = Modifier.fillMaxSize())
         } else if (!fullscreen && backdrop != null && !com.edgestream.tv.PressMode.on) {
             // Real photos, each with a slow documentary move, cross-fading to the next. The move is
             // read only in the draw phase (graphicsLayer), so nothing recomposes per frame.
@@ -308,7 +310,15 @@ fun EdgeApp(vm: AppViewModel = viewModel()) {
                 }
                 if (fullscreen || e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 // Text entry owns the number keys: Settings, Search, the first-run screen and any focused field.
-                if (!digitsGoToPad(fullscreen, screen, !sources.isNullOrEmpty(), textEntry.focused)) return@onPreviewKeyEvent false
+                // null sources = still loading; don't block channel entry until we know there are none.
+                val src = sources
+                val hasSources = src == null || src.isNotEmpty()
+                if (!digitsGoToPad(fullscreen, screen, hasSources, textEntry.focused)) {
+                    if (digitOf(e.key) != null && com.edgestream.tv.data.Sports.traceOn) {
+                        android.util.Log.d("EdgePad", "digit blocked: fullscreen=$fullscreen screen=$screen hasSources=$hasSources sources=${src?.size} text=${textEntry.focused}")
+                    }
+                    return@onPreviewKeyEvent false
+                }
                 // Controlled key repeat: deliberate single steps, then a capped cadence. The
                 // focused highlight never outruns the logical focus. Tiered for weak boxes.
                 val direction = e.key == Key.DirectionLeft || e.key == Key.DirectionRight ||
@@ -325,7 +335,13 @@ fun EdgeApp(vm: AppViewModel = viewModel()) {
                 }
                 val digit = digitOf(e.key)
                 when {
-                    digit != null -> { vm.channelPad.append('0' + digit); true }
+                    digit != null -> {
+                        vm.channelPad.append('0' + digit)
+                        if (com.edgestream.tv.data.Sports.traceOn) {
+                            android.util.Log.d("EdgePad", "digit=$digit pad=${vm.channelPad.state.value.digits} match=${vm.channelPad.state.value.match?.name} index=${vm.lcnIndex.value.size} channels=${vm.channels.value.size}")
+                        }
+                        true
+                    }
                     vm.channelPad.active && (e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter) -> {
                         vm.channelPad.commit()
                         true
@@ -408,13 +424,13 @@ private fun ChannelPadOsd(vm: AppViewModel, modifier: Modifier) {
         Text(
             when {
                 match != null -> "CH ${ChannelNumbers.lcn(match)}  ·  ${match.name}"
-                index.isEmpty() -> "Loading channels…"
-                else -> "No channel ${pad.digits}"
+                index.isEmpty() -> "Loading channels"
+                else -> "No match for ${pad.digits}"
             },
             style = MaterialTheme.typography.labelMedium, color = if (match != null) Edge.Accent else Edge.Faint,
             maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
-        if (match != null) Text("OK to watch", style = MaterialTheme.typography.labelSmall, color = Edge.Faint)
+        if (match != null) Text("Press OK to tune", style = MaterialTheme.typography.labelSmall, color = Edge.Faint)
     }
 }
 

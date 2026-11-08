@@ -144,8 +144,20 @@ object Debrid {
         if (ext !in VIDEO_EXT && !mime.startsWith("video/")) return false
         // Samples, trailers and extras clutter a library; real episodes are rarely under 40 MB.
         if (size in 1 until 40L * 1024 * 1024) return false
-        return !Regex("""(?i)(^|[\s._\-\[(])(sample|trailer|featurette|extras?)([\s._\-\])]|$)""").containsMatchIn(name)
+        return !EXTRA_VIDEO.containsMatchIn(name)
     }
+
+    // Compiled once: these run for every file in the library, and compiling a pattern per call
+    // was most of the library's CPU at launch.
+    private val EXTRA_VIDEO = Regex("""(?i)(^|[\s._\-\[(])(sample|trailer|featurette|extras?)([\s._\-\])]|$)""")
+    private val SEASON_TAIL = Regex("""(?i)\b(S\d{1,2}|Season \d{1,2})\b.*$""")
+    private val LEADING_TAG = Regex("""^\s*\[[^]]*]\s*""")
+    private val INITIAL_DOT = Regex("""(?<=\b\p{L})\.(?=\p{L}\.)""")
+    private val SPACES = Regex("""\s+""")
+    private val TRAILING_YEAR = Regex("""[(\[]?\b(19|20)\d{2}\b[)\]]?\s*$""")
+    private val BRACKETED = Regex("""[\[(][^\])]*[\])]""")
+    private val TRAILING_PUNCT = Regex("""[\s\-–:(\[]+$""")
+    private val NON_ALNUM = Regex("""[^a-z0-9]""")
 
     // ---- file names ------------------------------------------------------------------------
 
@@ -166,7 +178,7 @@ object Debrid {
             // Files inside a season pack are often just "S01E02.mkv"; the folder carries the name.
             if (title.isBlank()) title = stripYear(
                 tidy(folder).let { f -> EPISODE.find(f)?.let { f.substring(0, it.range.first) } ?: f }
-                    .replace(Regex("""(?i)\b(S\d{1,2}|Season \d{1,2})\b.*$"""), ""),
+                    .replace(SEASON_TAIL, ""),
             )
             return Parsed(cleanTitle(title), null, season, episode)
         }
@@ -178,18 +190,18 @@ object Debrid {
     }
 
     private fun tidy(s: String) = s
-        .replace(Regex("""^\s*\[[^]]*]\s*"""), "")
-        .replace(Regex("""(?<=\b\p{L})\.(?=\p{L}\.)"""), "\u0000") // keep initials like S.H.I.E.L.D together
+        .replace(LEADING_TAG, "")
+        .replace(INITIAL_DOT, "\u0000") // keep initials like S.H.I.E.L.D together
         .replace('.', ' ').replace('_', ' ').replace("\u0000", ".")
-        .replace(Regex("""\s+"""), " ").trim()
+        .replace(SPACES, " ").trim()
 
-    private fun stripYear(s: String) = s.replace(Regex("""[(\[]?\b(19|20)\d{2}\b[)\]]?\s*$"""), "").trim()
+    private fun stripYear(s: String) = s.replace(TRAILING_YEAR, "").trim()
 
     private fun cleanTitle(s: String) = s
         .replace(JUNK, "")
-        .replace(Regex("""[\[(][^\])]*[\])]"""), "")
-        .replace(Regex("""[\s\-–:(\[]+$"""), "")
-        .replace(Regex("""\s+"""), " ").trim()
+        .replace(BRACKETED, "")
+        .replace(TRAILING_PUNCT, "")
+        .replace(SPACES, " ").trim()
 
     // ---- Cinemeta --------------------------------------------------------------------------
 
@@ -243,7 +255,7 @@ object Debrid {
         )
     }
 
-    private fun norm(s: String) = s.lowercase().replace(Regex("""[^a-z0-9]"""), "")
+    private fun norm(s: String) = s.lowercase().replace(NON_ALNUM, "")
 
     // ---- the library -----------------------------------------------------------------------
 

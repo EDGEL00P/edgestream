@@ -18,6 +18,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.edgestream.tv.data.Http
@@ -46,6 +47,13 @@ fun LivePreview(url: String, onFailed: () -> Unit, modifier: Modifier = Modifier
                     ),
                 ),
             )
+            // Preview, not primary playback: small buffer for faster start and less memory pressure.
+            .setLoadControl(
+                DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(1_500, 8_000, 500, 1_000)
+                    .setPrioritizeTimeOverSizeThresholds(true)
+                    .build(),
+            )
             .build().apply {
                 volume = 0f
                 videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
@@ -58,7 +66,7 @@ fun LivePreview(url: String, onFailed: () -> Unit, modifier: Modifier = Modifier
             override fun onPlayerError(error: PlaybackException) = onFailed()
         }
         player.addListener(failed)
-        onDispose { player.removeListener(failed); player.release() }
+        onDispose { player.removeListener(failed); player.clearVideoSurface(); player.release() }
     }
     LifecycleStartEffect(player) {
         player.prepare()
