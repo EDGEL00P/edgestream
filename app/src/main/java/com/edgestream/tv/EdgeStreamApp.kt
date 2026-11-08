@@ -86,7 +86,7 @@ class EdgeStreamApp : Application(), SingletonImageLoader.Factory {
                 add(OkHttpNetworkFetcherFactory(callFactory = { Http.client }))
                 // Press mode: no third-party image loads anywhere; screens show their placeholders.
                 add(coil3.intercept.Interceptor { chain ->
-                    if (PressMode.on) coil3.request.ErrorResult(null, chain.request, IllegalStateException("press mode"))
+                    if (PressMode.on && !PressMode.isOwnArt(chain.request.data.toString())) coil3.request.ErrorResult(null, chain.request, IllegalStateException("press mode"))
                     else chain.proceed()
                 })
             }

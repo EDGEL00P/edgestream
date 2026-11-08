@@ -14,6 +14,9 @@ object PressMode {
     @Volatile var on = false
         private set
 
+    /** The owner's own artwork (collection covers in their GitHub repositories) stays visible. */
+    fun isOwnArt(url: String) = url.startsWith("https://raw.githubusercontent.com/EDGEL00P/")
+
     fun init(context: Context) {
         val debuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
         on = debuggable && File(context.filesDir, "press_mode").exists()

@@ -28,7 +28,7 @@ control on a 4K screen. Everything runs on the TV itself: no backend, no account
     <td><img src=".github/assets/collections.jpg" alt="Collections"><br><sub><b>Collections</b>: curated folders with their own cover art</sub></td>
   </tr>
   <tr>
-    <td><img src=".github/assets/player.jpg" alt="Player"><br><sub><b>Player</b>: channel, what's on, the live score and controls</sub></td>
+    <td><img src=".github/assets/guide.jpg" alt="TV Guide"><br><sub><b>TV Guide</b>: your channels, numbered and listed like real TV</sub></td>
     <td><img src=".github/assets/settings.jpg" alt="Settings"><br><sub><b>Settings</b>: one list, the way TV system settings read</sub></td>
   </tr>
 </table>
