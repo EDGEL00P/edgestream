@@ -142,9 +142,9 @@ fun FocusSurface(
     // draw the edge themselves.
     val beamed = FocusBeam.hostRoot != null && androidx.compose.ui.platform.LocalView.current.rootView === FocusBeam.hostRoot
     val beamToken = remember { Any() }
-    var coords by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
+    val coordsRef = remember { object { var v: androidx.compose.ui.layout.LayoutCoordinates? = null } }
     androidx.compose.runtime.DisposableEffect(focused, beamed) {
-        if (focused && beamed) coords?.takeIf { it.isAttached }?.let { FocusBeam.claim(beamToken, it.boundsInRoot()) }
+        if (focused && beamed) coordsRef.v?.takeIf { it.isAttached }?.let { FocusBeam.claim(beamToken, it.boundsInRoot()) }
         onDispose { FocusBeam.release(beamToken) }
     }
     // Glass gets its sheen and edge light; transparent list rows stay flat until focused.
@@ -183,7 +183,7 @@ fun FocusSurface(
             }
             // After the scale layer, so the beam hugs the card at its focused size.
             .onGloballyPositioned { c ->
-                coords = c
+                coordsRef.v = c
                 if (focused && beamed) FocusBeam.claim(beamToken, c.boundsInRoot())
             }
             .clip(shape)

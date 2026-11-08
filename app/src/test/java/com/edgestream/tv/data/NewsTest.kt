@@ -26,20 +26,23 @@ class NewsTest {
     private fun team(a: String) = Sports.Team(a, a, null, "1", false)
     private fun game(id: String, s: Sports.State) = Sports.Game(id, league, s, "", 0, team("H$id"), team("A$id"), emptyList(), null)
 
-    @Test fun pagesAreGamesThenHeadlines() {
+    @Test fun pagesAreOneEndlessSportsStream() {
+        // Casino ticker: sports only, no news, no LIVE badge — one scrolling page of all games.
         val pages = tickerPages(
             listOf(game("1", Sports.State.LIVE), game("2", Sports.State.UPCOMING), game("3", Sports.State.FINAL)),
             listOf(Headline("ABC News", "One"), Headline("ABC News", "Two")),
             perPage = 2,
         )
-        assertEquals(listOf("Live", "Results", "Headlines", "Headlines"), pages.map { it.badge })
+        assertEquals(1, pages.size)
+        assertEquals("Scoreboard", pages.single().badge)
         assertEquals(true, pages[0].live)
-        assertEquals(listOf("1", "2"), (pages[0] as TickerPage.Scores).games.map { it.id })
+        assertEquals(listOf("1", "2", "3"), (pages[0] as TickerPage.Scores).games.map { it.id })
     }
 
     @Test fun badgesFollowTheLauncherRules() {
-        assertEquals("Coming up", tickerPages(listOf(game("1", Sports.State.UPCOMING)), emptyList(), 3).single().badge)
-        assertEquals("Results", tickerPages(listOf(game("1", Sports.State.FINAL)), emptyList(), 3).single().badge)
+        // Single endless page regardless of state mix.
+        assertEquals("Scoreboard", tickerPages(listOf(game("1", Sports.State.UPCOMING)), emptyList(), 3).single().badge)
+        assertEquals("Scoreboard", tickerPages(listOf(game("1", Sports.State.FINAL)), emptyList(), 3).single().badge)
         assertEquals("Scoreboard", tickerPages(listOf(game("1", Sports.State.FINAL), game("2", Sports.State.UPCOMING)), emptyList(), 3).single().badge)
     }
 

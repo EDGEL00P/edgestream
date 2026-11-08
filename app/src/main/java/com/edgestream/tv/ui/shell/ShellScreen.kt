@@ -216,12 +216,10 @@ fun ShellScreen(
         } else if (rest != null) {
             Column(Modifier.fillMaxSize()) {
                 AmbientTop(vm, spotlight, tile, Modifier.fillMaxWidth().weight(1f).padding(bottom = GAP).graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen })
-                val headlines by vm.headlines.collectAsStateWithLifecycle()
                 val settings by vm.settings.collectAsStateWithLifecycle()
-                // Scores never show twice: while the Sports band is up, the strip runs headlines only.
-                val sportsBandUp = bandShown && bandTile == Tile.SPORTS
-                val tickerPages = remember(inputs.games, headlines, sportsBandUp) {
-                    tickerPages(if (sportsBandUp) emptyList() else inputs.games, headlines, perPage = 3)
+                // Endless sports ticker: always scores, never headlines, always scrolling.
+                val tickerPages = remember(inputs.games) {
+                    tickerPages(inputs.games, emptyList(), perPage = Int.MAX_VALUE)
                 }
                 Box(
                     Modifier.fillMaxWidth().height(BAND_HEIGHT).graphicsLayer {
@@ -347,8 +345,10 @@ private fun Band(
                             val ch = vm.preview.value
                             if (ch != null) vm.playChannel(ch, vm.zapListFor(ch)) else onEvent(ShellEvent.Open(Tile.SPORTS))
                         }
-                        is BandItem.Channel -> ChannelCard(item, req) { vm.playChannel(item.channel, item.row) }
-                        is BandItem.Resume -> ResumeCard(item, req) { vm.resume(item.p) }
+                        is BandItem.Channel -> ChannelCard(item, req,
+                            onClick = { vm.playChannel(item.channel, item.row) },
+                            onRemove = { vm.removeRecent(item.channel.key) })
+                        is BandItem.Resume -> ResumeCard(item, req, onClick = { vm.resume(item.p) }, onRemove = { vm.removeContinue(item.p.key) })
                         is BandItem.Watch -> WatchCard(item, req) { vm.openWatchItem(item.item) }
                         is BandItem.Vod -> VodCard(item, req) { vm.vodDetail.value = item.item }
                         is BandItem.Alert -> AlertCard(item, req) { onEvent(ShellEvent.Open(Tile.WEATHER)) }

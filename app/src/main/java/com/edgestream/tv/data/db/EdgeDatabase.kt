@@ -316,6 +316,9 @@ interface UserDao {
     @Query("DELETE FROM progress WHERE `key` = :key")
     suspend fun deleteProgress(key: String)
 
+    @Query("DELETE FROM history WHERE `key` = :key")
+    suspend fun deleteHistory(key: String)
+
     @Upsert
     suspend fun saveProgress(p: ProgressEntity)
 }

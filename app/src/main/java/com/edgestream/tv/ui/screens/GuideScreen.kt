@@ -151,11 +151,9 @@ fun GuideScreen(vm: AppViewModel, overlay: Boolean = false, onClose: () -> Unit 
     var pending by remember { mutableStateOf<Int?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
-    // Over live video the picture stays visible behind the header; the grid below is near-opaque.
+    // Over live video: a solid, readable panel — not a frosted see-through (screenshot: readable guide).
     // Inset matches every tab (EdgeLayout): EdgeApp gives the nav 40dp, content sits 14dp in.
-    val backdrop = if (overlay) Modifier.background(
-        Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.25f), 0.22f to Edge.Bg.copy(alpha = 0.88f), 1f to Edge.Bg.copy(alpha = 0.97f)),
-    ) else Modifier
+    val backdrop = if (overlay) Modifier.background(Edge.Bg.copy(alpha = 0.97f)) else Modifier
     // Over live video the root UI padding is not applied, so the overlay adds the safe area itself.
     val safe = if (overlay) LocalSafeArea.current else SafeArea()
     Column(Modifier.fillMaxSize().then(backdrop).padding(
@@ -190,6 +188,7 @@ fun GuideScreen(vm: AppViewModel, overlay: Boolean = false, onClose: () -> Unit 
         }
 
         BoxWithConstraints(Modifier.fillMaxSize()) {
+            // Readable mini-guide over live video: balanced columns, larger type (fonts bumped below).
             val channelCol = (maxWidth * 0.22f).coerceIn(200.dp, 320.dp)
             val timeline = maxWidth - channelCol
             val dpPerMin = timeline / WINDOW_MIN.toFloat()
@@ -410,7 +409,7 @@ private fun GuideRow(
             // Big providers number into the tens of thousands; never wrap.
             Text("${com.edgestream.tv.data.ChannelNumbers.lcn(ch)}", style = MaterialTheme.typography.labelMedium, color = Edge.Faint, maxLines = 1, softWrap = false, modifier = Modifier.width(48.dp))
             Logo(ch.logo, ch.name, Modifier.size(width = 48.dp, height = 34.dp))
-            OneLine(ch.name, Modifier.padding(start = 8.dp), MaterialTheme.typography.labelLarge)
+            OneLine(ch.name, Modifier.padding(start = 8.dp), MaterialTheme.typography.titleSmall)
         }
         Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(10.dp))) {
             val visible = programmes.filter { it.stop > viewStart && it.start < viewEnd }
@@ -504,7 +503,7 @@ private fun GuideRow(
                             if (catchup) androidx.compose.material3.Icon(Icons.Rounded.History, "Catch-up", Modifier.padding(end = 4.dp).size(16.dp), tint = Edge.Accent2)
                             if (reminded) androidx.compose.material3.Icon(Icons.Rounded.NotificationsActive, "Reminder set", Modifier.padding(end = 4.dp).size(16.dp), tint = Edge.Gold)
                             OneLine(
-                                p.title, style = MaterialTheme.typography.labelLarge,
+                                p.title, style = MaterialTheme.typography.titleSmall,
                                 color = if (f) Edge.Text else if (past) Edge.Faint else Edge.Text,
                                 modifier = Modifier.weight(1f, fill = false),
                             )
@@ -512,7 +511,7 @@ private fun GuideRow(
                         }
                         OneLine(
                             p.subtitle?.takeIf { it.isNotBlank() } ?: p.category?.takeIf { it.isNotBlank() } ?: Format.range(p.start, p.stop, use24h),
-                            style = MaterialTheme.typography.labelMedium, color = Edge.Faint,
+                            style = MaterialTheme.typography.labelLarge, color = Edge.Faint,
                         )
                     }
                     if (isNow) Box(

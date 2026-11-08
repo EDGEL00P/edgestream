@@ -1133,6 +1133,7 @@ class Repository(
         }
 
     suspend fun deleteProgress(key: String) = withContext(Dispatchers.IO) { db.user().deleteProgress(key) }
+    suspend fun removeHistory(key: String) = withContext(Dispatchers.IO) { db.user().deleteHistory(key) }
 
     suspend fun saveProgress(p: ProgressEntity) = withContext(Dispatchers.IO) { db.user().saveProgress(p) }
 

@@ -45,7 +45,18 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Fast iteration, but not sloppy: native code undebuggable (no overhead),
+            // profileable so baseline profiles apply exactly as in release.
+            isDebuggable = true
+            isJniDebuggable = false
+            isMinifyEnabled = false
+            isShrinkResources = false
+        }
         release {
+            // Optimised daily build: minified, shrunk, stripped — measurably faster/smaller.
+            isDebuggable = false
+            isJniDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

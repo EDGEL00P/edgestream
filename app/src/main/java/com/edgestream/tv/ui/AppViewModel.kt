@@ -1316,6 +1316,14 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
         }
     }
 
+    /** Remove a channel from Recently Watched (house rule: delete wins over hiding). */
+    fun removeRecent(key: String) {
+        viewModelScope.launch {
+            repo.removeHistory(key)
+            showNotice("Removed from Recently Watched")
+        }
+    }
+
     fun playVod(item: VodEntity, fromStart: Boolean = false) =
         playVod(item.key, item.name, item.poster, item.streamUrl, item.year, fromStart)
 

@@ -43,7 +43,15 @@ object FocusBeam {
         private set
     private var owner: Any? = null
 
-    fun claim(who: Any, bounds: Rect) { owner = who; target = bounds }
+    fun claim(who: Any, bounds: Rect) {
+        owner = who
+        val t = target
+        // Ignore sub-pixel/layout jitter (focus-scale animation, scroll settle) to avoid recomposing
+        // the overlay on every frame.
+        if (t == null || kotlin.math.abs(t.left - bounds.left) > 1.5f || kotlin.math.abs(t.top - bounds.top) > 1.5f ||
+            kotlin.math.abs(t.width - bounds.width) > 1.5f || kotlin.math.abs(t.height - bounds.height) > 1.5f
+        ) target = bounds
+    }
     fun release(who: Any) { if (owner === who) { owner = null; target = null } }
 }
 
@@ -56,7 +64,12 @@ fun FocusBeamOverlay(modifier: Modifier = Modifier) {
         val t = target ?: return@LaunchedEffect
         // Appearing from nothing: start in place rather than flying in from a stale spot.
         if (rect.value == Rect.Zero || shown < 0.05f) rect.snapTo(t)
-        else rect.animateTo(t, spring(dampingRatio = 0.86f, stiffness = 620f))
+        else {
+            val v = rect.value
+            if (kotlin.math.abs(v.left - t.left) > 0.5f || kotlin.math.abs(v.top - t.top) > 0.5f ||
+                kotlin.math.abs(v.width - t.width) > 0.5f || kotlin.math.abs(v.height - t.height) > 0.5f
+            ) rect.animateTo(t, spring(dampingRatio = 0.86f, stiffness = 620f))
+        }
     }
     val glow = DeviceTier.tier != DeviceTier.Tier.LOW
     Box(

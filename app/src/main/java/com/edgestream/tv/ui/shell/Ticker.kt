@@ -47,64 +47,44 @@ sealed interface TickerPage {
 }
 
 /**
- * Scores first (live, then coming up, then results), [perPage] to a page, then one headline per
- * page. A page of games is named the broadcast way: Live / Results / Coming up / Scoreboard.
+ * Sports only — no news, no "LIVE" badge, no pages that end: one endless casino-style stream of
+ * every game (live first, then coming up, then results), looping end to end.
  */
 fun tickerPages(games: List<Sports.Game>, headlines: List<Headline>, perPage: Int): List<TickerPage> {
     val order = mapOf(Sports.State.LIVE to 0, Sports.State.UPCOMING to 1, Sports.State.FINAL to 2)
-    val scores = games.sortedWith(compareBy({ order[it.state] }, { it.startMs })).chunked(perPage.coerceAtLeast(1)).map { page ->
-        when {
-            page.any { it.state == Sports.State.LIVE } -> TickerPage.Scores(page, "Live", live = true)
-            page.all { it.state == Sports.State.FINAL } -> TickerPage.Scores(page, "Results", live = false)
-            page.all { it.state == Sports.State.UPCOMING } -> TickerPage.Scores(page, "Coming up", live = false)
-            else -> TickerPage.Scores(page, "Scoreboard", live = false)
-        }
-    }
-    return scores.take(5) + headlines.take(10).map { TickerPage.News(it) }
+    if (games.isEmpty()) return emptyList()
+    val sorted = games.sortedWith(compareBy({ order[it.state] }, { it.startMs }))
+    return listOf(TickerPage.Scores(sorted, "Scoreboard", live = sorted.any { it.state == Sports.State.LIVE }))
 }
 
 /**
- * The slim always-on strip under the dock: one badge, then every score and headline scrolling
- * continuously right-to-left (medium-fast). The scroll is a draw-phase translation of its own
- * layer, so it never recomposes or relays out the screen.
+ * The slim always-on strip under the dock: sports scores scrolling continuously right-to-left,
+ * end to end (medium-fast). The scroll is a draw-phase translation of its own layer, so it
+ * never recomposes or relays out the screen.
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun Ticker(pages: List<TickerPage>, use24h: Boolean, modifier: Modifier = Modifier) {
     if (pages.isEmpty()) return
-    val live = pages.any { it.live }
-    // Its own slim smoked-glass strip: text stays readable over any photo.
-    Row(modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            if (live) "LIVE" else "LATEST", color = if (live) Color.White else Edge.OnAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-            modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (live) Edge.Live else Edge.Accent).padding(horizontal = 10.dp, vertical = 3.dp),
-        )
-        Row(
-            Modifier.weight(1f).padding(start = 14.dp).clipToBounds()
-                .basicMarquee(
-                    iterations = Int.MAX_VALUE, initialDelayMillis = 0, repeatDelayMillis = 0,
-                    spacing = androidx.compose.foundation.MarqueeSpacing(64.dp), velocity = 80.dp,
-                ),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-          // Recorded once into its own layer: each scroll frame only slides this finished layer
-          // (re-recording ~50 items per frame cost ~25 ms on the SHIELD).
-          Row(Modifier.graphicsLayer(), verticalAlignment = Alignment.CenterVertically) {
-            pages.forEach { p ->
-                when (p) {
-                    is TickerPage.Scores -> p.games.forEach { ScoreCell(it, use24h, Modifier.padding(end = 32.dp)) }
-                    is TickerPage.News -> Text(
-                        buildAnnotatedString {
-                            withStyle(SpanStyle(color = Edge.Accent, fontWeight = FontWeight.Bold)) { append(p.headline.source) }
-                            append("   ")
-                            withStyle(SpanStyle(color = Edge.Text, fontWeight = FontWeight.SemiBold)) { append(p.headline.title) }
-                        },
-                        fontSize = 15.sp, maxLines = 1, softWrap = false, modifier = Modifier.padding(end = 40.dp),
-                    )
-                }
+    // End-to-end casino ticker: full-width, no badge, no news — scores scroll forever.
+    Row(
+        modifier.padding(horizontal = 12.dp).clipToBounds()
+            .basicMarquee(
+                iterations = Int.MAX_VALUE, initialDelayMillis = 0, repeatDelayMillis = 0,
+                spacing = androidx.compose.foundation.MarqueeSpacing(64.dp), velocity = 80.dp,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+      // Recorded once into its own layer: each scroll frame only slides this finished layer
+      // (re-recording ~50 items per frame cost ~25 ms on the SHIELD).
+      Row(Modifier.graphicsLayer(), verticalAlignment = Alignment.CenterVertically) {
+        pages.forEach { p ->
+            when (p) {
+                is TickerPage.Scores -> p.games.forEach { ScoreCell(it, use24h, Modifier.padding(end = 32.dp)) }
+                is TickerPage.News -> Unit // ticker is sports-only now
             }
-          }
         }
+      }
     }
 }
 

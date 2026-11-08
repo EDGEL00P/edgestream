@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -75,16 +76,28 @@ fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, modifier: Mod
         )
     }
     Column(modifier) {
-    if (briefing.isNotEmpty()) BriefingLine(briefing, Modifier.fillMaxWidth().padding(start = 4.dp, bottom = 10.dp))
-    Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        // Screenshot top row: clock left, briefing centre, ASK right.
         val events by vm.calendarEvents.collectAsStateWithLifecycle()
         val day = cal.get(Calendar.DAY_OF_YEAR)
         val upNext = remember(events, day) { com.edgestream.tv.data.upcoming(events, java.time.LocalDate.now(), days = 14, limit = 3) }
-        TimeTile(clock, settings.use24h, weather, settings.fahrenheit, upNext, Modifier.width(196.dp).fillMaxHeight())
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            TimeTile(clock, settings.use24h, weather, settings.fahrenheit, upNext, Modifier.width(240.dp))
+            if (briefing.isNotEmpty()) BriefingLine(briefing, Modifier.weight(1f).padding(start = 18.dp, top = 8.dp))
+            AskButton(vm, Modifier.padding(start = 12.dp, top = 6.dp))
+        }
         val preview by vm.preview.collectAsStateWithLifecycle()
-        if (spotlight is BandItem.Game) GameSpot(spotlight.game, settings.use24h, preview?.name, Modifier.weight(1f).fillMaxHeight())
-        else Spotlight(spotlight, tile, settings.use24h, Modifier.weight(1f).fillMaxHeight())
+        if (spotlight is BandItem.Game) GameSpot(spotlight.game, settings.use24h, preview?.name, Modifier.weight(1f).fillMaxWidth())
+        else Spotlight(spotlight, tile, settings.use24h, Modifier.weight(1f).fillMaxWidth())
     }
+}
+
+@Composable
+private fun AskButton(vm: AppViewModel, modifier: Modifier) {
+    com.edgestream.tv.ui.components.FocusSurface(
+        onClick = { vm.openSearch("") }, modifier = modifier, focusScale = 1.04f, glow = false,
+    ) {
+        Text("/  Ask", color = Edge.Text.copy(alpha = 0.55f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
     }
 }
 
@@ -110,19 +123,19 @@ private fun temp(c: Double, f: Boolean) = if (c.isNaN()) "–" else if (f) "${(c
 @Composable
 private fun TimeTile(clock: Long, use24h: Boolean, w: PublicApis.WeatherDetail?, f: Boolean, upNext: List<Pair<java.time.LocalDate, com.edgestream.tv.data.CalendarEvent>>, modifier: Modifier) {
     val minute = clock / 60_000
-    Column(modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
-        Text(remember(minute, use24h) { Format.time(clock, use24h) }, color = Edge.Text, fontSize = 44.sp, lineHeight = 44.sp, fontFamily = ClockFont)
-        Text(
-            remember(minute) { SimpleDateFormat("EEEE d MMMM", Locale.getDefault()).format(Date(clock)) },
-            color = Edge.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
-        )
-        // Now — the only place the current temperature appears (the forecast lives in Weather).
-        if (w != null) Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            WeatherGlyph(w.code, glyphSize = 16.dp)
-            Text("${temp(w.tempC, f)}  ${w.city}", color = Edge.Text, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 5.dp))
+    Column(modifier.padding(horizontal = 2.dp, vertical = 2.dp)) {
+        Text(remember(minute, use24h) { Format.time(clock, use24h) }, color = Edge.Text, fontSize = 54.sp, lineHeight = 54.sp, fontFamily = ClockFont, fontWeight = FontWeight.Black)
+        Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                remember(minute) { SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(Date(clock)) },
+                color = Edge.Text.copy(alpha = 0.75f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+            )
+            // Now — the only place the current temperature appears (the forecast lives in Weather).
+            if (w != null) {
+                Text("   ${temp(w.tempC, f)}  ${w.city}", color = Edge.Text.copy(alpha = 0.75f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                WeatherGlyph(w.code, glyphSize = 14.dp, modifier = Modifier.padding(start = 6.dp))
+            }
         }
-        UpNext(upNext, use24h)
     }
 }
 
@@ -213,57 +226,91 @@ private fun GameSpot(g: Sports.Game, use24h: Boolean, previewing: String?, modif
     var insight by remember(g.id) { mutableStateOf<Sports.Insight?>(null) }
     LaunchedEffect(g.id) { insight = runCatching { Sports.insight(g) }.getOrNull() }
     val homeChance = insight?.let { it.liveHomeWinChance ?: it.homeWinChance ?: it.marketHomeWinChance }
-    val source = when {
-        insight?.liveHomeWinChance != null -> "live win probability"
-        insight?.homeWinChance != null -> "ESPN matchup predictor"
-        insight?.marketHomeWinChance != null -> "market, no vig"
-        else -> null
-    }
-    Row(modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (g.state == Sports.State.LIVE) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(Edge.Live))
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text(
-                    // While its channel plays behind Home, say which channel that is.
-                    listOfNotNull(g.league.name, if (g.state == Sports.State.LIVE) "LIVE" else null, previewing?.let { "ON $it" } ?: g.venue)
-                        .joinToString("  ·  ").uppercase(),
-                    color = Edge.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-            }
+    val latestPlay = insight?.plays?.lastOrNull()
+    Column(modifier.padding(horizontal = 6.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Eyebrow: red dot · LEAGUE · LIVE · VENUE
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(Edge.Live))
+            Spacer(Modifier.width(10.dp))
             Text(
-                "${g.away.name} vs ${g.home.name}",
-                style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                listOfNotNull(g.league.name, if (g.state == Sports.State.LIVE) "LIVE" else null, previewing?.let { "ON $it" } ?: g.venue)
+                    .joinToString("  ·  ").uppercase(),
+                color = Edge.Live, fontSize = 14.sp, fontWeight = FontWeight.Black, letterSpacing = 2.2.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                if (g.state == Sports.State.UPCOMING) {
-                    Text(
-                        "${SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(Date(g.startMs))}  ${Format.time(g.startMs, use24h)}",
-                        style = MaterialTheme.typography.titleLarge, color = Edge.Text,
-                    )
-                } else {
-                    com.edgestream.tv.ui.components.RollingText("${g.away.abbr} ${g.away.score ?: "0"}", MaterialTheme.typography.displaySmall)
-                    Text(if (g.state == Sports.State.FINAL) "FINAL" else g.detail, color = Dim, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    com.edgestream.tv.ui.components.RollingText("${g.home.score ?: "0"} ${g.home.abbr}", MaterialTheme.typography.displaySmall)
+        }
+        Text(
+            "${g.away.name.uppercase()} VS ${g.home.name.uppercase()}",
+            color = Edge.Text, fontSize = 56.sp, lineHeight = 60.sp, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
+        // Score line: AWAY score · ABBRs + clock · HOME score (screenshot: 24 CIN·ATL Q3·6:18 17)
+        if (g.state == Sports.State.UPCOMING) {
+            Text("${SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(Date(g.startMs))}  ${Format.time(g.startMs, use24h)}",
+                color = Edge.Text, fontSize = 44.sp, fontWeight = FontWeight.Black)
+        } else {
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                Text(g.away.score ?: "0", color = Edge.Text, fontSize = 48.sp, fontWeight = FontWeight.Black)
+                Column(Modifier.padding(bottom = 8.dp)) {
+                    Text("${g.away.abbr} · ${g.home.abbr}", color = Edge.Text.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(if (g.state == Sports.State.FINAL) "FINAL" else g.detail.ifBlank { "LIVE" }, color = Edge.Text.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Text(g.home.score ?: "0", color = Edge.Text.copy(alpha = 0.45f), fontSize = 48.sp, fontWeight = FontWeight.Black)
+            }
+        }
+        if (homeChance != null) {
+            val away = teamColor(g.away)
+            val home = teamColor(g.home)
+            Row(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(50))) {
+                Box(Modifier.weight((100 - homeChance).coerceAtLeast(1).toFloat()).fillMaxHeight().background(away))
+                Box(Modifier.weight(homeChance.coerceAtLeast(1).toFloat()).fillMaxHeight().background(home.copy(alpha = 0.75f)))
+            }
+            Row(Modifier.fillMaxWidth()) {
+                Text("${g.away.abbr} ${100 - homeChance}% to win", color = Edge.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.weight(1f))
+                Text("${g.home.abbr} $homeChance%", color = Edge.Text.copy(alpha = 0.7f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            }
+            // Drive/field chart (NFL-style, from latest play text) — only when ESPN published plays.
+            latestPlay?.let { DriveChart(g, it, Modifier.fillMaxWidth()) }
+        } else if (latestPlay != null) {
+            DriveChart(g, latestPlay, Modifier.fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+private fun DriveChart(g: Sports.Game, play: Sports.Play, modifier: Modifier) {
+    // Parse "3rd & 4 at ATL 32" style situation from latest play text; fall back to recent text.
+    val situation = play.text.substringBefore(" - ").substringBefore(". ").trim().take(60)
+    val yard = Regex("at\\s+(?:the\\s+)?(\\d{1,2})\\s*$").find(situation)?.groupValues?.get(1)?.toIntOrNull() ?: 30
+    val ownSide = !situation.contains(g.home.abbr, true)
+    val frac = if (ownSide) (100 - yard) / 100f else yard / 100f
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(situation.uppercase(), color = Edge.Text, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Box(Modifier.fillMaxWidth().height(56.dp).padding(top = 8.dp)) {
+            // Yard lines
+            Row(Modifier.fillMaxWidth().height(52.dp)) {
+                repeat(10) { i ->
+                    Box(Modifier.weight(1f).fillMaxHeight()) {
+                        Box(Modifier.align(Alignment.CenterEnd).width(1.dp).fillMaxHeight().background(Edge.Text.copy(alpha = 0.22f)))
+                        if (i > 0 && i < 10) {
+                            val label = when (i) { 1 -> "10"; 2 -> "20"; 3 -> "30"; 4 -> "40"; 5 -> "50"; 6 -> "40"; 7 -> "30"; 8 -> "20"; else -> "10" }
+                            Text(label, color = Edge.Text.copy(alpha = 0.5f), fontSize = 10.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp))
+                        }
+                    }
                 }
             }
-            if (homeChance != null && source != null) {
-                val away = teamColor(g.away)
-                val home = teamColor(g.home)
-                Row(Modifier.width(420.dp).height(6.dp).clip(RoundedCornerShape(50))) {
-                    Box(Modifier.weight((100 - homeChance).coerceAtLeast(1).toFloat()).fillMaxHeight().background(away))
-                    Box(Modifier.weight(homeChance.coerceAtLeast(1).toFloat()).fillMaxHeight().background(home))
-                }
-                Row(Modifier.width(420.dp)) {
-                    Text("${g.away.abbr} ${100 - homeChance}%", color = Edge.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    Text(source, color = Dim, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.weight(1f))
-                    Text("${g.home.abbr} $homeChance%", color = Edge.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            // End zones
+            Box(Modifier.align(Alignment.CenterStart).width(18.dp).height(52.dp).background(Color(0xFFE6512A).copy(alpha = 0.75f)))
+            Box(Modifier.align(Alignment.CenterEnd).width(18.dp).height(52.dp).background(Color(0xFF7A1030).copy(alpha = 0.85f)))
+            // Ball marker + line
+            val cx = (frac.coerceIn(0.02f, 0.98f))
+            Box(Modifier.fillMaxWidth(cx).height(52.dp), contentAlignment = Alignment.CenterEnd) {
+                Box(Modifier.fillMaxWidth().height(3.dp).background(Edge.Live))
+                Box(Modifier.size(14.dp).clip(CircleShape).background(Color(0xFF8A5A2B)).padding(2.dp)) {
+                    Box(Modifier.fillMaxSize().clip(CircleShape).background(Color.White))
                 }
             }
         }
-        SpotArt(BandItem.Game(g), Modifier.padding(start = 14.dp).fillMaxHeight())
     }
 }
 

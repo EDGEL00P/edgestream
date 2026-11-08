@@ -2,8 +2,13 @@ package com.edgestream.tv.ui.shell
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -13,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -45,7 +51,6 @@ import com.edgestream.tv.ui.components.TeamLogo
 import com.edgestream.tv.ui.components.WeatherGlyph
 import com.edgestream.tv.ui.glass.SECONDARY_TEXT_ALPHA
 import com.edgestream.tv.ui.input.hoverFocus
-import com.edgestream.tv.ui.input.remoteClickable
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -55,19 +60,23 @@ private val CardShape = RoundedCornerShape(14.dp)
 
 /**
  * Every band card: focus lifts it (scale in the draw phase, so held keys never relayout) and draws
- * a bright border — focus is shown by size and outline, never colour alone.
+ * a bright border — focus is shown by size and outline, never colour alone. Screenshot style:
+ * dark translucent card, accent bottom edge, focused gets a red border.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun BandCard(
     width: Dp,
     requester: FocusRequester,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    content: @Composable BoxScope.() -> Unit,
+    content: @Composable BoxScope.(focused: Boolean) -> Unit,
 ) {
     val active = LocalBandActive.current
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.08f else 1f, spring(stiffness = 700f), label = "card")
+    val scale by animateFloatAsState(if (focused) 1.06f else 1f, spring(stiffness = 700f), label = "card")
+    val interaction = remember { MutableInteractionSource() }
     Box(
         modifier
             .width(width).height(CARD_HEIGHT)
@@ -75,14 +84,24 @@ fun BandCard(
                 scaleX = scale; scaleY = scale
                 shape = CardShape; clip = true
             }
-            .background(Edge.palette.panelHi)
-            .then(if (focused) Modifier.border(3.dp, Edge.Text, CardShape) else Modifier)
+            .background(Edge.Text.copy(alpha = 0.08f))
+            .then(if (focused) Modifier.border(2.dp, Edge.Live, CardShape) else Modifier)
             .hoverFocus(requester)
             .onFocusChanged { focused = it.isFocused }
             .focusProperties { canFocus = active }
-            .remoteClickable(onClick),
-        content = content,
-    )
+            .focusable(interactionSource = interaction)
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
+    ) {
+        // Accent bottom edge (orange/gradient like screenshot), always present.
+        Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp)
+            .background(Brush.horizontalGradient(listOf(Color(0xFFE6512A), Color(0xFF2F6FB5)))))
+        content(focused)
+    }
 }
 
 private val Scrim = Brush.verticalGradient(0.45f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.82f))
@@ -92,40 +111,40 @@ private fun teamColor(hex: String?): Color? =
 
 @Composable
 fun GameCard(g: Sports.Game, requester: FocusRequester, onClick: () -> Unit) {
-    val away = teamColor(g.away.color) ?: Edge.palette.panelHi
-    val home = teamColor(g.home.color) ?: Edge.palette.panel
-    BandCard(228.dp, requester, onClick) {
-        Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(away, home))))
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.22f)))
-        g.league.logo?.let { TeamLogo(it, g.league.name, Modifier.align(Alignment.TopCenter).padding(top = 8.dp), size = 18.dp) }
-        Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
-            TeamLogo(g.away.logo, g.away.name, size = 52.dp)
-            val live = g.state == Sports.State.LIVE
+    val live = g.state == Sports.State.LIVE
+    val minute = remember(g.startMs, g.state) { if (live) g.detail.substringAfter("·").trim().substringBefore(" ").ifBlank { g.detail } else "" }
+    BandCard(260.dp, requester, onClick) { focused ->
+        // Focused banner like screenshot: "Watch on …" pill overlapping the top edge.
+        if (focused) {
+            val label = "Watch on ${g.broadcasts.firstOrNull() ?: g.league.name}"
             Text(
-                if (live) "${g.away.score ?: "0"} – ${g.home.score ?: "0"}" else "vs",
-                color = Color.White, fontSize = if (live) 20.sp else 15.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 12.dp),
+                label, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.align(Alignment.TopStart).offset(y = (-10).dp)
+                    .clip(RoundedCornerShape(8.dp)).background(Edge.Live).padding(horizontal = 10.dp, vertical = 4.dp),
             )
-            TeamLogo(g.home.logo, g.home.name, size = 52.dp)
         }
-        Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (g.state == Sports.State.LIVE) {
-                Text("LIVE", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Edge.Live).padding(horizontal = 5.dp, vertical = 1.dp))
+        Column(Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    (if (live) "${g.away.abbr} ${g.away.score ?: "0"}-${g.home.score ?: "0"} ${g.home.abbr}" else "${g.away.abbr} vs ${g.home.abbr}").uppercase(),
+                    color = Edge.Text, fontSize = 20.sp, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (minute.isNotBlank()) Text(minute, color = Edge.Live, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
             }
             Text(
-                if (g.state == Sports.State.LIVE) g.detail
-                else remember(g.startMs) { SimpleDateFormat("EEE HH:mm", Locale.getDefault()).format(Date(g.startMs)) },
-                color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 6.dp),
+                if (live) "${g.league.name} · ${g.broadcasts.firstOrNull() ?: g.detail}"
+                else remember(g.startMs) { "${g.league.name} · ${SimpleDateFormat("EEE HH:mm", Locale.getDefault()).format(Date(g.startMs))}" },
+                color = Edge.Text.copy(alpha = 0.65f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
     }
 }
 
 @Composable
-fun ChannelCard(item: BandItem.Channel, requester: FocusRequester, onClick: () -> Unit) {
-    BandCard(228.dp, requester, onClick) {
+fun ChannelCard(item: BandItem.Channel, requester: FocusRequester, onClick: () -> Unit, onRemove: (() -> Unit)? = null) {
+    BandCard(228.dp, requester, onClick, onLongClick = onRemove) {
         AsyncImage(item.channel.logo, item.channel.name, Modifier.align(Alignment.Center).padding(bottom = 26.dp).size(width = 120.dp, height = 60.dp),
             contentScale = ContentScale.Fit)
         Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().background(Scrim).padding(horizontal = 10.dp, vertical = 7.dp)) {
@@ -133,20 +152,25 @@ fun ChannelCard(item: BandItem.Channel, requester: FocusRequester, onClick: () -
             item.now?.let {
                 Text(it, color = Color.White.copy(alpha = SECONDARY_TEXT_ALPHA), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            if (onRemove != null) Text("Hold OK to remove", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 6.dp, vertical = 2.dp))
         }
     }
 }
 
 @Composable
-fun ResumeCard(item: BandItem.Resume, requester: FocusRequester, onClick: () -> Unit) {
+fun ResumeCard(item: BandItem.Resume, requester: FocusRequester, onClick: () -> Unit, onRemove: () -> Unit) {
     val p = item.p
-    // A poster like every other title card; only a thin progress line, no text.
-    BandCard(86.dp, requester, onClick) {
+    // A poster like every other title card; only a thin progress line, no text. Long-press removes.
+    BandCard(86.dp, requester, onClick, onLongClick = onRemove) {
         AsyncImage(p.poster, p.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         val frac = if (p.durationMs > 0) (p.positionMs.toFloat() / p.durationMs).coerceIn(0f, 1f) else 0f
         Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Color.Black.copy(alpha = 0.5f))) {
             Box(Modifier.fillMaxHeight().fillMaxWidth(frac).background(Edge.Accent))
         }
+        Text("Hold OK to remove", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.align(Alignment.BottomStart).padding(start = 6.dp, bottom = 10.dp)
+                .clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 6.dp, vertical = 2.dp))
     }
 }
 
