@@ -77,6 +77,14 @@ class EdgeDream : DreamService(), LifecycleOwner, ViewModelStoreOwner, SavedStat
     override val viewModelStore: ViewModelStore get() = store
     override val savedStateRegistry: SavedStateRegistry get() = savedState.savedStateRegistry
 
+    /**
+     * The system can call onDreamingStopped after onDetachedFromWindow. Once destroyed, the
+     * lifecycle stays destroyed; a late event used to throw and take the whole app down.
+     */
+    private fun move(event: Lifecycle.Event) {
+        if (registry.currentState != Lifecycle.State.DESTROYED) registry.handleLifecycleEvent(event)
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         // Compose needs a saved-state owner on the view tree; it must be restored before the
@@ -91,21 +99,21 @@ class EdgeDream : DreamService(), LifecycleOwner, ViewModelStoreOwner, SavedStat
             setContent { EdgeTheme { DreamScreen() } }
         }
         setContentView(view)
-        registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        move(Lifecycle.Event.ON_RESUME)
     }
 
     override fun onDreamingStarted() {
         super.onDreamingStarted()
-        registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+        move(Lifecycle.Event.ON_START)
     }
 
     override fun onDreamingStopped() {
-        registry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+        move(Lifecycle.Event.ON_STOP)
         super.onDreamingStopped()
     }
 
     override fun onDetachedFromWindow() {
-        registry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+        move(Lifecycle.Event.ON_DESTROY)
         store.clear()
         super.onDetachedFromWindow()
     }

@@ -679,6 +679,8 @@ class Repository(
             status("Guide for ${source.name} (${idx + 1}/${urls.size})…")
             val wanted = prewanted?.toHashSet() ?: HashSet()
             val acc = GuideAccumulator(GUIDE_MAX_PER_CHANNEL)
+            val filledBefore = resolved.size
+            val began = System.nanoTime()
             try {
                 Http.open(url) { stream ->
                     XmltvParser.parse(
@@ -737,6 +739,11 @@ class Repository(
                     }
                     used += url
                 }
+                // Debug builds: what each guide actually contributes, to decide which are worth fetching.
+                if (Sports.traceOn) android.util.Log.d(
+                    "EdgeEpg",
+                    "${url.substringAfter("://").take(90)}: +${resolved.size - filledBefore} channels, ${rows.size} programmes, ${(System.nanoTime() - began) / 1_000_000} ms",
+                )
                 // Publish this guide's matches now, so channels light up as each file finishes.
                 if (epgUpdates.isNotEmpty()) { db.channels().setEpgIds(epgUpdates.toList()); epgUpdates.clear() }
                 if (logoUpdates.isNotEmpty()) { db.channels().setLogos(logoUpdates.toList()); logoUpdates.clear() }
