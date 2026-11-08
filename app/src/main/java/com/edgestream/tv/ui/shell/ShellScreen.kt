@@ -169,6 +169,13 @@ fun ShellScreen(
     val rows = allRows.getValue(bandTile)
     var focusedItem by remember { mutableStateOf<BandItem?>(null) }
     val spotlight = if (rest?.inBand == true) focusedItem else rows.firstOrNull()?.items?.firstOrNull()
+    // What the hero turns through at rest: live games first, then a warning and what you were watching.
+    val deck = remember(allRows) {
+        val items = allRows.values.flatten().flatMap { it.items }
+        val games = items.filterIsInstance<BandItem.Game>().distinctBy { it.game.id }
+            .sortedBy { if (it.game.state == com.edgestream.tv.data.Sports.State.LIVE) 0 else 1 }.take(3)
+        games + listOfNotNull(items.firstOrNull { it is BandItem.Alert }, items.firstOrNull { it is BandItem.Resume })
+    }
     // At rest, the room takes the spotlit game's colours; open sections light it themselves.
     val roomGame = (spotlight as? BandItem.Game)?.game
     LaunchedEffect(roomGame?.id, rest != null) { if (rest != null) com.edgestream.tv.ui.components.RoomLight.of(roomGame) }
@@ -218,7 +225,7 @@ fun ShellScreen(
         } else if (rest != null) {
             // Home has no page around it, so it takes the page padding the safe area assumes (TvFrame).
             Column(Modifier.fillMaxSize().padding(horizontal = com.edgestream.tv.ui.PAGE_PAD_X_DP.dp, vertical = com.edgestream.tv.ui.PAGE_PAD_Y_DP.dp)) {
-                AmbientTop(vm, spotlight, tile, Modifier.fillMaxWidth().weight(1f).padding(bottom = GAP).graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen })
+                AmbientTop(vm, spotlight, tile, if (rest.inBand) emptyList() else deck, Modifier.fillMaxWidth().weight(1f).padding(bottom = GAP).graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen })
                 val settings by vm.settings.collectAsStateWithLifecycle()
                 // Endless sports ticker: always scores, never headlines, always scrolling.
                 val tickerPages = remember(inputs.games) {

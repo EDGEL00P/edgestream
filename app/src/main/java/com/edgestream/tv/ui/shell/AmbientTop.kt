@@ -1,5 +1,6 @@
 package com.edgestream.tv.ui.shell
 
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import kotlinx.coroutines.launch
@@ -62,7 +64,7 @@ private val Dim get() = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA)
  * focused card rather than repeating the band.
  */
 @Composable
-fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, modifier: Modifier = Modifier) {
+fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, deck: List<BandItem> = emptyList(), modifier: Modifier = Modifier) {
     val clock by vm.clock.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val weather by vm.weatherDetail.collectAsStateWithLifecycle()
@@ -79,8 +81,33 @@ fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, modifier: Mod
             VoiceButton(vm, Modifier.padding(start = 14.dp, top = 8.dp))
         }
         val preview by vm.preview.collectAsStateWithLifecycle()
-        if (spotlight is BandItem.Game) GameSpot(spotlight.game, settings.use24h, preview?.name, Modifier.weight(1f).fillMaxWidth())
-        else Spotlight(spotlight, tile, settings.use24h, Modifier.weight(1f).fillMaxWidth())
+        // At rest the hero turns through the best of Home (top games, the forecast, a warning,
+        // what you were watching); browsing a row, it follows focus instead.
+        val forecast = weather?.takeIf { settings.showWeather && it.daily.size >= 2 }
+        val cards: List<Any> = if (deck.isEmpty()) listOfNotNull(spotlight) else deck + listOfNotNull(forecast)
+        var index by remember(cards.size, deck.isEmpty()) { androidx.compose.runtime.mutableIntStateOf(0) }
+        LaunchedEffect(cards.size, deck.isEmpty()) {
+            if (cards.size > 1) while (true) { kotlinx.coroutines.delay(HERO_TURN_MS); index = (index + 1) % cards.size }
+        }
+        val card = cards.getOrNull(index) ?: spotlight
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            androidx.compose.animation.Crossfade(card, label = "hero") { c ->
+                when (c) {
+                    is BandItem.Game -> GameSpot(c.game, settings.use24h, settings.fahrenheit, preview?.name, Modifier.fillMaxSize())
+                    is PublicApis.WeatherDetail -> ForecastSpot(c, settings.fahrenheit, Modifier.fillMaxSize())
+                    is BandItem.Resume -> ResumeSpot(c.p, Modifier.fillMaxSize())
+                    // Nothing loaded yet: an empty hero, never a placeholder card.
+                    null -> Unit
+                    else -> Spotlight(c as BandItem, tile, settings.use24h, Modifier.fillMaxSize())
+                }
+            }
+        }
+        if (cards.size > 1) Row(Modifier.padding(start = 8.dp, top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            cards.indices.forEach { i ->
+                Box(Modifier.size(width = if (i == index) 18.dp else 6.dp, height = 6.dp).clip(CircleShape)
+                    .background(Edge.Text.copy(alpha = if (i == index) 0.9f else 0.35f)))
+            }
+        }
     }
 }
 
@@ -223,72 +250,156 @@ private fun Spotlight(item: BandItem?, tile: Tile, use24h: Boolean, modifier: Mo
 }
 
 /**
- * Home becomes the focused game: its name in scoreboard type, the score large, and ESPN's own
- * win probability as a ribbon in the two teams' colours (live model in play, matchup predictor
- * before kick-off, the market's no-vig price when ESPN publishes neither).
+ * Home becomes the game: each side washed in that team's colour, both logos beside their scores,
+ * the venue and its weather under the name, and ESPN's win probability (live model in play,
+ * matchup predictor before kick-off, the market's no-vig price otherwise) beside the score.
  */
 @Composable
-private fun GameSpot(g: Sports.Game, use24h: Boolean, previewing: String?, modifier: Modifier) {
+private fun GameSpot(g: Sports.Game, use24h: Boolean, fahrenheit: Boolean, previewing: String?, modifier: Modifier) {
     var insight by remember(g.id) { mutableStateOf<Sports.Insight?>(null) }
     LaunchedEffect(g.id) { insight = runCatching { Sports.insight(g) }.getOrNull() }
+    var venueWeather by remember(g.id) { mutableStateOf(VENUE_WEATHER[g.id]) }
+    LaunchedEffect(g.id) { if (venueWeather == null) venueWeather = venueWeatherOf(g) }
     val homeChance = insight?.let { it.liveHomeWinChance ?: it.homeWinChance ?: it.marketHomeWinChance }
     val latestPlay = insight?.plays?.lastOrNull()
-    // The hero gets whatever height the band leaves, so it sizes itself to that space: full
-    // scoreboard type and the drive chart when tall, smaller type and no chart when short.
-    androidx.compose.foundation.layout.BoxWithConstraints(modifier.padding(horizontal = 6.dp, vertical = 6.dp)) {
-    val tall = maxHeight >= 240.dp
-    val big = if (maxHeight >= 180.dp) 1f else 0.8f
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(if (tall) 6.dp else 4.dp)) {
-        // Eyebrow: red dot · LEAGUE · LIVE · VENUE
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(10.dp).clip(CircleShape).background(Edge.Live))
-            Spacer(Modifier.width(10.dp))
-            Text(
-                listOfNotNull(g.league.name, if (g.state == Sports.State.LIVE) "LIVE" else null, previewing?.let { "ON $it" } ?: g.venue)
-                    .joinToString("  ·  ").uppercase(),
-                color = Edge.Live, fontSize = 14.sp, fontWeight = FontWeight.Black, letterSpacing = 2.2.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Text(
-            "${g.away.name.uppercase()} VS ${g.home.name.uppercase()}",
-            color = Edge.Text, fontSize = 56.sp * big, lineHeight = 60.sp * big, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp,
-            maxLines = 1, overflow = TextOverflow.Ellipsis,
-        )
-        // Away score, both abbreviations over the clock, home score.
-        // The win chance shares the score row (to its right), so the hero needs no extra lines.
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-        if (g.state == Sports.State.UPCOMING) {
-            Text("${SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(Date(g.startMs))}  ${Format.time(g.startMs, use24h)}",
-                color = Edge.Text, fontSize = 44.sp * big, lineHeight = 48.sp * big, fontWeight = FontWeight.Black)
-        } else {
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                Text(g.away.score ?: "0", color = Edge.Text, fontSize = 48.sp * big, lineHeight = 50.sp * big, fontWeight = FontWeight.Black)
-                Column(Modifier.padding(bottom = 6.dp)) {
-                    Text("${g.away.abbr} · ${g.home.abbr}", color = Edge.Text.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Text(if (g.state == Sports.State.FINAL) "FINAL" else g.detail.ifBlank { "LIVE" }, color = Edge.Text.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                }
-                Text(g.home.score ?: "0", color = Edge.Text.copy(alpha = 0.45f), fontSize = 48.sp * big, lineHeight = 50.sp * big, fontWeight = FontWeight.Black)
+    val away = teamColor(g.away)
+    val home = teamColor(g.home)
+    // The hero gets whatever height the band leaves; type scales to it and the drive chart only
+    // appears when there is room for it.
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
+        val big = (maxHeight.value / 170f).coerceIn(0.7f, 1f)
+        val tall = maxHeight >= 240.dp
+        Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.horizontalGradient(
+            0f to away.copy(alpha = 0.42f), 0.4f to Color.Transparent, 0.6f to Color.Transparent, 1f to home.copy(alpha = 0.42f),
+        )))
+        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (g.state == Sports.State.LIVE) { LivePill(); Spacer(Modifier.width(14.dp)) }
+                Text(
+                    "${g.away.name.uppercase()} VS ${g.home.name.uppercase()}",
+                    color = Edge.Text, fontSize = 50.sp * big, lineHeight = 54.sp * big, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
             }
-        }
-        if (homeChance != null) {
-            val away = teamColor(g.away)
-            val home = teamColor(g.home)
-            Column(Modifier.padding(start = 40.dp, bottom = 10.dp).weight(1f)) {
-                Row(Modifier.fillMaxWidth()) {
-                    Text("${g.away.abbr} ${100 - homeChance}% to win", color = Edge.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    Spacer(Modifier.weight(1f))
-                    Text("${g.home.abbr} $homeChance%", color = Edge.Text.copy(alpha = 0.7f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            // Where it's played and what the weather is doing there; the channel while it previews.
+            val place = listOfNotNull(
+                previewing?.let { "On $it" },
+                g.venue,
+                venueWeather?.let { w -> if (w.indoor) "Indoors" else "${temp(w.tempC, fahrenheit)} ${w.description}" },
+            ).joinToString("  ·  ")
+            if (place.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(place, color = Edge.Text.copy(alpha = 0.8f), fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                venueWeather?.takeIf { !it.indoor }?.let { WeatherGlyph(it.code, glyphSize = 18.dp, modifier = Modifier.padding(start = 8.dp)) }
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                TeamLogo(g.away.logo, g.away.name, size = 50.dp * big)
+                if (g.state == Sports.State.UPCOMING) {
+                    Text("${SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(Date(g.startMs))}  ${Format.time(g.startMs, use24h)}",
+                        color = Edge.Text, fontSize = 34.sp * big, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 16.dp))
+                } else {
+                    Text(g.away.score ?: "0", color = Edge.Text, fontSize = 46.sp * big, lineHeight = 48.sp * big, fontWeight = FontWeight.Black,
+                        modifier = Modifier.padding(start = 14.dp))
+                    Column(Modifier.padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("${g.away.abbr} · ${g.home.abbr}", color = Edge.Text.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text(if (g.state == Sports.State.FINAL) "FINAL" else g.detail.ifBlank { "LIVE" }, color = Edge.Text.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    Text(g.home.score ?: "0", color = Edge.Text, fontSize = 46.sp * big, lineHeight = 48.sp * big, fontWeight = FontWeight.Black,
+                        modifier = Modifier.padding(end = 14.dp))
                 }
-                Row(Modifier.padding(top = 4.dp).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50))) {
-                    Box(Modifier.weight((100 - homeChance).coerceAtLeast(1).toFloat()).fillMaxHeight().background(away))
-                    Box(Modifier.weight(homeChance.coerceAtLeast(1).toFloat()).fillMaxHeight().background(home.copy(alpha = 0.75f)))
+                TeamLogo(g.home.logo, g.home.name, size = 50.dp * big)
+                if (homeChance != null) Column(Modifier.padding(start = 36.dp).weight(1f)) {
+                    Row(Modifier.fillMaxWidth()) {
+                        Text("${g.away.abbr} ${100 - homeChance}%", color = Edge.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Text("  to win", color = Edge.Text.copy(alpha = 0.6f), fontSize = 14.sp, maxLines = 1)
+                        Spacer(Modifier.weight(1f))
+                        Text("${g.home.abbr} $homeChance%", color = Edge.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    }
+                    Row(Modifier.padding(top = 5.dp).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50))) {
+                        Box(Modifier.weight((100 - homeChance).coerceAtLeast(1).toFloat()).fillMaxHeight().background(away))
+                        Box(Modifier.weight(homeChance.coerceAtLeast(1).toFloat()).fillMaxHeight().background(home))
+                    }
                 }
             }
+            if (tall && latestPlay != null) DriveChart(g, latestPlay, Modifier.fillMaxWidth())
         }
-        }
-        // Drive/field chart from ESPN's latest play, when there is room and plays were published.
-        if (tall && latestPlay != null) DriveChart(g, latestPlay, Modifier.fillMaxWidth())
     }
+}
+
+/** The LIVE badge: theme accent, its dot breathing like a recording light. */
+@Composable
+private fun LivePill() {
+    val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "live")
+    val dot by t.animateFloat(1f, 0.2f, androidx.compose.animation.core.infiniteRepeatable(
+        androidx.compose.animation.core.tween(900), androidx.compose.animation.core.RepeatMode.Reverse), label = "dot")
+    Row(Modifier.clip(RoundedCornerShape(6.dp)).background(Edge.Live).padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).alpha(dot).clip(CircleShape).background(Edge.OnAccent))
+        Text("LIVE", color = Edge.OnAccent, fontSize = 15.sp, fontWeight = FontWeight.Black, letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 7.dp))
+    }
+}
+
+/** Continue watching: the poster as a card, its progress under it, the title and time left beside it. */
+@Composable
+private fun ResumeSpot(p: com.edgestream.tv.data.db.ProgressEntity, modifier: Modifier) {
+    val left = ((p.durationMs - p.positionMs) / 60_000).coerceAtLeast(0)
+    val done = if (p.durationMs > 0) (p.positionMs.toFloat() / p.durationMs).coerceIn(0f, 1f) else 0f
+    Row(modifier.padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.fillMaxHeight().aspectRatio(2f / 3f)) {
+            AsyncImage(p.poster, p.title, Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Edge.Text.copy(alpha = 0.08f)),
+                contentScale = ContentScale.Crop)
+            Box(Modifier.padding(top = 5.dp).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(Edge.Text.copy(alpha = 0.25f))) {
+                Box(Modifier.fillMaxWidth(done).fillMaxHeight().background(Edge.Accent))
+            }
+        }
+        Column(Modifier.padding(start = 22.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("CONTINUE WATCHING", color = Edge.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+            Text(p.title.uppercase(), color = Edge.Text, fontSize = 44.sp, lineHeight = 48.sp, fontWeight = FontWeight.Black, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("$left min left", color = Edge.Text.copy(alpha = 0.8f), fontSize = 17.sp)
+        }
+    }
+}
+
+private const val HERO_TURN_MS = 8_000L
+
+private data class VenueWeather(val indoor: Boolean, val tempC: Double, val code: Int) {
+    val description: String get() = PublicApis.Weather("", tempC, code).description
+}
+
+/** Game id -> weather at the ground, so turning back to a card doesn't fetch it again. */
+private val VENUE_WEATHER = java.util.concurrent.ConcurrentHashMap<String, VenueWeather>()
+
+private suspend fun venueWeatherOf(g: Sports.Game): VenueWeather? {
+    if (g.indoor == true) return VenueWeather(true, Double.NaN, 0).also { VENUE_WEATHER[g.id] = it }
+    val city = g.venueCity ?: return null
+    return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val loc = PublicApis.geocode(listOfNotNull(city, g.venueCountry).joinToString(", ")) ?: PublicApis.geocode(city)
+        loc?.let { PublicApis.weather(it) }?.let { VenueWeather(false, it.tempC, it.code) }
+    }?.also { VENUE_WEATHER[g.id] = it }
+}
+
+/** The forecast card: today on the left, the next days beside it. */
+@Composable
+private fun ForecastSpot(w: PublicApis.WeatherDetail, fahrenheit: Boolean, modifier: Modifier) {
+    Row(modifier.padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                WeatherGlyph(w.code, glyphSize = 40.dp)
+                Text(w.city.uppercase(), color = Edge.Text, fontSize = 48.sp, lineHeight = 52.sp, fontWeight = FontWeight.Black, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 14.dp))
+            }
+            Text("${temp(w.tempC, fahrenheit)} ${w.description}  ·  High ${temp(w.highC, fahrenheit)}  Low ${temp(w.lowC, fahrenheit)}" +
+                (if (w.rainChance > 0) "  ·  ${w.rainChance}% rain" else ""),
+                color = Edge.Text.copy(alpha = 0.8f), fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(30.dp)) {
+            w.daily.drop(1).take(4).forEach { d ->
+                val day = runCatching { java.time.LocalDate.parse(d.date).dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault()) }.getOrDefault(d.date)
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(day.uppercase(), color = Edge.Text.copy(alpha = 0.7f), fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    WeatherGlyph(d.code, glyphSize = 28.dp)
+                    Text("${temp(d.highC, fahrenheit)}  ${temp(d.lowC, fahrenheit)}", color = Edge.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
     }
 }
 

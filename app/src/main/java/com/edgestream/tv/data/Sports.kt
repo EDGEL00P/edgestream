@@ -83,6 +83,8 @@ object Sports {
         /** Venue city and country as ESPN lists them ("East Rutherford", "USA"), for game-time weather. */
         val venueCity: String? = null,
         val venueCountry: String? = null,
+        /** True for a closed roof or dome (ESPN's venue flag); the weather outside doesn't reach the game. */
+        val indoor: Boolean? = null,
         /** Bookmaker line from the scoreboard feed, when ESPN publishes one. */
         val line: Line? = null,
     )
@@ -439,6 +441,7 @@ object Sports {
             venue = comp.optJSONObject("venue")?.optString("fullName")?.ifBlank { null },
             venueCity = comp.optJSONObject("venue")?.optJSONObject("address")?.optString("city")?.ifBlank { null },
             venueCountry = comp.optJSONObject("venue")?.optJSONObject("address")?.optString("country")?.ifBlank { null },
+            indoor = comp.optJSONObject("venue")?.takeIf { it.has("indoor") }?.optBoolean("indoor"),
             line = lineFor(comp),
         )
     }
