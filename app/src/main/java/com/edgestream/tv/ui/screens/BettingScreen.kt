@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.edgestream.tv.data.NflModel
+import com.edgestream.tv.data.NflPicks
 import com.edgestream.tv.data.Racing
 import com.edgestream.tv.data.Sports
 import com.edgestream.tv.data.db.ChannelEntity
@@ -61,6 +63,7 @@ import com.edgestream.tv.ui.components.FilterChipText
 import com.edgestream.tv.ui.components.Pill
 import com.edgestream.tv.ui.glass
 import java.util.Locale
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
 /**
@@ -79,6 +82,7 @@ fun BettingScreen(vm: AppViewModel) {
     val races by vm.sportsFeed.races.collectAsStateWithLifecycle()
     val loaded by vm.sportsFeed.loaded.collectAsStateWithLifecycle()
     val loading = !loaded
+    val nfl by vm.nflBoard.collectAsStateWithLifecycle()
     var marketMode by remember { mutableStateOf("all") }
     var gameSheet by remember { mutableStateOf<Sports.Game?>(null) }
     var raceSheet by remember { mutableStateOf<Racing.Race?>(null) }
@@ -88,6 +92,11 @@ fun BettingScreen(vm: AppViewModel) {
     val live = if (marketMode == "all" || marketMode == "live") games.filter { it.state == Sports.State.LIVE } else emptyList()
     val upcoming = if (marketMode == "all" || marketMode == "next") games.filter { it.state == Sports.State.UPCOMING }.sortedBy { it.startMs }.take(10) else emptyList()
     val sortedRaces = if (marketMode == "all" || marketMode == "racing") races.sortedBy { it.startMs } else emptyList()
+    val nflPicks = nfl?.picks.orEmpty()
+    val nflValue = if (marketMode == "all" || marketMode == "nfl") nflPicks.filter { it.values.isNotEmpty() } else emptyList()
+    val nflAll = if (marketMode == "nfl") nflPicks else emptyList()
+    val nflLocks = if (marketMode == "nfl") nflPicks.filter { it.tier != null }.sortedByDescending { it.winProb } else emptyList()
+    val nflFirst = live.isEmpty() && upcoming.isEmpty() && sortedRaces.isEmpty()
 
     LaunchedEffect(loading) {
         if (!loading && FocusMemory.last("betting:row") == null) {
@@ -120,6 +129,7 @@ fun BettingScreen(vm: AppViewModel) {
                     item(key = "__live") { FilterChipText("Live", marketMode == "live", onClick = { marketMode = "live" }) }
                     item(key = "__next") { FilterChipText("Pre-match", marketMode == "next", onClick = { marketMode = "next" }) }
                     item(key = "__racing") { FilterChipText("Racing", marketMode == "racing", onClick = { marketMode = "racing" }) }
+                    item(key = "__nfl") { FilterChipText("NFL Picks", marketMode == "nfl", onClick = { marketMode = "nfl" }) }
                 }
             }
         }
@@ -149,6 +159,34 @@ fun BettingScreen(vm: AppViewModel) {
                 ) { raceSheet = r }
             }
         }
+        if (nflLocks.isNotEmpty()) {
+            item { BetSection("NFL PICKS · LOCKS", "heavy favourites the model and market agree on") }
+            itemsIndexed(nflLocks, key = { _, p -> "nfl-lock:${p.game.id}" }) { i, p ->
+                NflPickRow(p, settings.use24h, if (i == 0 && nflFirst) firstRow else null, "betting:row|nfll:${p.game.id}") { gameSheet = p.game }
+            }
+        }
+        if (nflValue.isNotEmpty()) {
+            item { BetSection("NFL PICKS · VALUE", "rules that beat the closing line since 2006") }
+            itemsIndexed(nflValue, key = { _, p -> "nfl-value:${p.game.id}" }) { i, p ->
+                NflPickRow(p, settings.use24h, if (i == 0 && nflFirst && nflLocks.isEmpty()) firstRow else null, "betting:row|nflv:${p.game.id}") { gameSheet = p.game }
+            }
+        }
+        if (nflAll.isNotEmpty()) {
+            item { BetSection("NFL PICKS · EVERY GAME", "model winner and confidence") }
+            itemsIndexed(nflAll, key = { _, p -> "nfl-all:${p.game.id}" }) { i, p ->
+                NflPickRow(p, settings.use24h, if (i == 0 && nflFirst && nflValue.isEmpty() && nflLocks.isEmpty()) firstRow else null, "betting:row|nfl:${p.game.id}") { gameSheet = p.game }
+            }
+        }
+        if (marketMode == "nfl") {
+            val board = nfl
+            item {
+                if (board == null) {
+                    Text("Loading NFL model…", style = MaterialTheme.typography.bodyLarge, color = Edge.Dim, modifier = Modifier.padding(top = 18.dp))
+                } else {
+                    NflTrackRecord(board)
+                }
+            }
+        }
         if (!loading && games.isEmpty() && sortedRaces.isEmpty()) {
             item { Text("No markets right now.", style = MaterialTheme.typography.bodyLarge, color = Edge.Dim) }
         }
@@ -166,6 +204,7 @@ fun BettingScreen(vm: AppViewModel) {
             game = g,
             channel = lookup.find(g),
             use24h = settings.use24h,
+            pick = nflPicks.firstOrNull { it.game.id == g.id },
             onWatch = { ch -> vm.playChannel(ch, vm.zapListFor(ch)); gameSheet = null },
             onClose = { gameSheet = null },
         )
@@ -319,6 +358,7 @@ private fun BetGameSheet(
     game: Sports.Game,
     channel: ChannelEntity?,
     use24h: Boolean,
+    pick: NflPicks.Pick?,
     onWatch: (ChannelEntity) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -351,6 +391,15 @@ private fun BetGameSheet(
                 OddsRow("Book", line.provider.ifBlank { "Market" })
             } else {
                 Text("No line published for this game yet.", style = MaterialTheme.typography.bodyLarge, color = Edge.Dim)
+            }
+            if (pick != null) {
+                Spacer(Modifier.height(10.dp))
+                OddsRow("Pick", "${pick.winner} · ${pct(pick.winProb)}" + (pick.tier?.let { "  ·  ${it.label}" } ?: ""))
+                OddsRow("Model line", NflPicks.lineText(pick.modelHomeMargin, game.home.abbr, game.away.abbr))
+                pick.marketHomeProb?.let { OddsRow("Market (no vig)", "${game.home.abbr} ${pct(it)}") }
+                pick.values.forEach { v ->
+                    OddsRow(v.rule.label, v.selection + (v.windMph?.let { "  ·  wind $it mph" } ?: "") + if (v.modelAgrees) "  ·  model agrees" else "")
+                }
             }
             Text(
                 channel?.let { "On ${it.name}" } ?: "Check provider lineup",
@@ -442,6 +491,84 @@ private fun BetRunnerRow(runner: Racing.Runner, firstFocus: FocusRequester?) {
         )
     }
 }
+
+@Composable
+private fun NflPickRow(pick: NflPicks.Pick, use24h: Boolean, focusRequester: FocusRequester?, memoryKey: String, onClick: () -> Unit) {
+    val g = pick.game
+    FocusSurface(
+        onClick = onClick, modifier = Modifier.fillMaxWidth().then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier), shape = EdgeShapes.Card,
+        focusScale = 1.01f, glow = false, memoryKey = memoryKey,
+    ) { focused ->
+        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("NFL", style = MaterialTheme.typography.labelSmall, color = if (focused) Edge.Text else Edge.Faint)
+                    Spacer(Modifier.width(10.dp))
+                    Text(Format.time(g.startMs, use24h), style = MaterialTheme.typography.labelSmall, color = Edge.Dim)
+                }
+                Row(Modifier.padding(top = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(g.away.abbr, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("   @   ", style = MaterialTheme.typography.labelMedium, color = Edge.Faint)
+                    Text(g.home.abbr, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+                Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    BetMini("PICK", "${pick.winner} ${pct(pick.winProb)}", Modifier.weight(1f))
+                    BetMini("MODEL", NflPicks.lineText(pick.modelHomeMargin, g.home.abbr, g.away.abbr), Modifier.weight(1f))
+                    BetMini("MARKET", pick.marketHomeMargin?.let { NflPicks.lineText(it, g.home.abbr, g.away.abbr) } ?: "—", Modifier.weight(1f))
+                    BetMini(
+                        "VALUE",
+                        pick.values.joinToString("  ·  ") { it.selection + if (it.modelAgrees) " (model agrees)" else "" }.ifBlank { "—" },
+                        Modifier.weight(1.3f),
+                    )
+                }
+            }
+            when {
+                pick.values.isNotEmpty() -> Pill("VALUE", color = Edge.Gold)
+                pick.tier != null -> Pill(pick.tier.label.uppercase(), color = Edge.Accent)
+                else -> Pill("MODEL", color = Edge.Accent2)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NflTrackRecord(board: NflPicks.Board) {
+    val lines = buildList {
+        board.backtest?.let { b ->
+            add(
+                "Model, ${b.firstSeason}–${b.lastSeason} holdout: ${pct(b.winnerHitRate)} of winners over ${b.games} games · " +
+                    "Brier ${String.format(Locale.US, "%.3f", b.modelBrier)} vs market ${String.format(Locale.US, "%.3f", b.marketBrier)}. " +
+                    "Picks blend the rating with the market spread, which is the sharper forecaster.",
+            )
+        }
+        board.tiers.forEach { t ->
+            add(
+                "${t.tier.label} (pick ${pct(t.tier.floor)}+): won ${t.all.hitRate?.let(::pct) ?: "—"} since ${NflModel.LINES_FROM} (${t.all.graded}) · " +
+                    "${t.holdout.hitRate?.let(::pct) ?: "—"} since ${NflModel.HOLDOUT_FROM} (${t.holdout.graded}). Straight-up on heavy favourites, so the payout is small.",
+            )
+        }
+        board.rules.forEach { r ->
+            add(
+                "${r.rule.label} (${r.rule.detail}): ${r.all.hitRate?.let(::pct) ?: "—"} since ${NflModel.LINES_FROM} (${r.all.graded}) · " +
+                    "${r.holdout.hitRate?.let(::pct) ?: "—"} since ${NflModel.HOLDOUT_FROM} (${r.holdout.graded}). Break-even at -110 is 52.4%.",
+            )
+        }
+        val log = board.log
+        if (log.record.graded + log.record.pushes + log.open > 0) {
+            add(
+                "Logged picks: ${log.record.wins}-${log.record.losses}-${log.record.pushes}" +
+                    (log.avgClv?.let { " · closing line value ${if (it >= 0) "+" else ""}${String.format(Locale.US, "%.1f", it)} pts" } ?: "") +
+                    " · ${log.open} open",
+            )
+        }
+        add("Data: nflverse schedules (CC-BY 4.0), ESPN lines, Open-Meteo wind.")
+    }
+    Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        lines.forEach { Text(it, style = MaterialTheme.typography.labelMedium, color = Edge.Dim) }
+    }
+}
+
+private fun pct(p: Double): String = "${(p * 100).roundToInt()}%"
 
 private fun trimNumber(v: Double): String =
     if (v % 1.0 == 0.0) v.toInt().toString() else v.toString()

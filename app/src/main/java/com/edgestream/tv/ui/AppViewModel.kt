@@ -870,6 +870,24 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
             if (hide) games.map(com.edgestream.tv.data.Sports::spoilerFree) else games
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** The nflverse-backed NFL model, rebuilt every 6 h while the Betting board is open. */
+    private val nflModel = flow {
+        while (true) {
+            com.edgestream.tv.data.NflPicks.loadModel(app.filesDir)?.let { emit(it) }
+            delay(6 * 3_600_000L)
+        }
+    }
+
+    /** NFL Picks: model winners for upcoming games plus rule-based value picks. Score ticks don't rebuild it. */
+    val nflBoard: StateFlow<com.edgestream.tv.data.NflPicks.Board?> =
+        combine(
+            nflModel,
+            sportsFeed.games.map { games -> games.filter { it.league.id == "nfl" && it.state == com.edgestream.tv.data.Sports.State.UPCOMING } }
+                .distinctUntilChanged { a, b -> a.map { it.id to it.line } == b.map { it.id to it.line } },
+        ) { model, games -> model to games }
+            .mapLatest { (model, games) -> com.edgestream.tv.data.NflPicks.board(model, games, app.filesDir) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     /** Game id → guide ids airing it. Score ticks don't re-query: only a new slate or a new guide does. */
     private val sportsGuide: StateFlow<Map<String, List<String>>> =
         combine(

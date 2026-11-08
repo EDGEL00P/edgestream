@@ -80,6 +80,9 @@ object Sports {
         /** Networks carrying it, as ESPN names them ("ESPN", "TNT", "FOX"). */
         val broadcasts: List<String>,
         val venue: String?,
+        /** Venue city and country as ESPN lists them ("East Rutherford", "USA"), for game-time weather. */
+        val venueCity: String? = null,
+        val venueCountry: String? = null,
         /** Bookmaker line from the scoreboard feed, when ESPN publishes one. */
         val line: Line? = null,
     )
@@ -434,6 +437,8 @@ object Sports {
             startMs = parseDate(e.optString("date")),
             home = home, away = away, broadcasts = broadcasts,
             venue = comp.optJSONObject("venue")?.optString("fullName")?.ifBlank { null },
+            venueCity = comp.optJSONObject("venue")?.optJSONObject("address")?.optString("city")?.ifBlank { null },
+            venueCountry = comp.optJSONObject("venue")?.optJSONObject("address")?.optString("country")?.ifBlank { null },
             line = lineFor(comp),
         )
     }
@@ -590,7 +595,7 @@ object Sports {
     }
 
     /** Implied probability of an American money line: -150 -> 60 %, +150 -> 40 %. */
-    private fun impliedProb(american: Int): Double = if (american < 0) {
+    internal fun impliedProb(american: Int): Double = if (american < 0) {
         -american.toDouble() / (-american + 100)
     } else {
         100.0 / (american + 100)
@@ -1275,6 +1280,8 @@ object Sports {
                     put("away", encodeTeam(g.away))
                     put("broadcasts", broadcasts)
                     g.venue?.let { put("venue", it) }
+                    g.venueCity?.let { put("venueCity", it) }
+                    g.venueCountry?.let { put("venueCountry", it) }
                     g.line?.let { put("line", encodeLine(it)) }
                 },
             )
@@ -1310,6 +1317,8 @@ object Sports {
                 id = o.optString("id"), league = league, state = state, detail = o.optString("detail"),
                 startMs = o.optLong("start"), home = home, away = away, broadcasts = broadcasts,
                 venue = o.optString("venue").ifBlank { null },
+                venueCity = o.optString("venueCity").ifBlank { null },
+                venueCountry = o.optString("venueCountry").ifBlank { null },
                 line = decodeLine(o.optJSONObject("line")),
             )
         }
