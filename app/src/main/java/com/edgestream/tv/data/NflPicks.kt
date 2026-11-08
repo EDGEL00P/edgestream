@@ -21,6 +21,9 @@ import kotlin.math.roundToInt
 object NflPicks {
     const val GAMES_URL = "https://github.com/nflverse/nflverse-data/releases/download/schedules/games.csv"
     private const val CACHE_FILE = "nflverse-games.csv"
+    /** The weekly re-tune's output; only published when it beats the previous numbers on unseen seasons. */
+    const val PARAMS_URL = "https://raw.githubusercontent.com/EDGEL00P/edgestream/main/model/nfl-params.json"
+    private const val PARAMS_FILE = "nfl-params.json"
     private const val LOG_FILE = "nfl-picks.json"
     private const val STALE_MS = 6 * 3_600_000L
     /** Hourly forecasts are only worth trusting this far out. */
@@ -87,9 +90,25 @@ object NflPicks {
                 ?.also { writeAtomic(cache, it) }
                 ?: cache.takeIf(File::isFile)?.readText()
         } ?: return@withContext null
+        NflModel.params = loadParams(dir, now)
         val rows = withContext(Dispatchers.Default) { NflModel.parse(text) }.takeIf { it.isNotEmpty() } ?: return@withContext null
         val book = NflProps.loadBook(dir, rows.maxOf { it.season }, now)
         withContext(Dispatchers.Default) { build(rows, book) }
+    }
+
+    /** Published re-tuned numbers (cached a day), else the last good copy, else the built-in ones. */
+    private suspend fun loadParams(dir: File, now: Long): NflModel.Params {
+        val cache = File(dir, PARAMS_FILE)
+        if (cache.isFile && now - cache.lastModified() < 24 * 3_600_000L) cache.readText().let(NflModel.Params::fromJson)?.let { return it }
+        val fresh = try {
+            Http.openSuspend(PARAMS_URL) { it.readBytes().decodeToString() }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+        fresh?.let(NflModel.Params::fromJson)?.let { writeAtomic(cache, fresh); return it }
+        return cache.takeIf(File::isFile)?.readText()?.let(NflModel.Params::fromJson) ?: NflModel.Params()
     }
 
     /**

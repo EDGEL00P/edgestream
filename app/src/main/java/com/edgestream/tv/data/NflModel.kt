@@ -37,6 +37,46 @@ object NflModel {
     /** A home-dog pick the rating also likes by this many points (61% on the holdout). */
     const val MODEL_AGREES = 2.0
     const val HOLDOUT_FROM = 2019
+
+    /**
+     * The tunable numbers. Defaults are the constants above (fit 2002–18); a weekly re-tune may
+     * publish better ones (model/nfl-params.json), which load only when every value is sane.
+     */
+    data class Params(
+        val k: Double = K,
+        val errorCap: Double = ERROR_CAP,
+        val homeField: Double = HOME_FIELD,
+        val rest: Double = REST,
+        val regress: Double = REGRESS,
+        val backupQb: Double = BACKUP_QB,
+        val sigma: Double = SIGMA,
+        val blend: Double = BLEND,
+        /** Where these came from: "built-in", or the re-tune that produced them. */
+        val source: String = "built-in",
+    ) {
+        fun sane(): Boolean = k in 0.005..0.3 && errorCap in 7.0..60.0 && homeField in 0.0..5.0 && rest in 0.0..4.0 &&
+            regress in 0.0..0.8 && backupQb in 0.0..10.0 && sigma in 9.0..18.0 && blend in 0.0..1.0
+
+        fun toJson(extra: Map<String, Any> = emptyMap()): String = org.json.JSONObject().apply {
+            put("k", k); put("errorCap", errorCap); put("homeField", homeField); put("rest", rest)
+            put("regress", regress); put("backupQb", backupQb); put("sigma", sigma); put("blend", blend); put("source", source)
+            extra.forEach { (key, v) -> put(key, v) }
+        }.toString(2)
+
+        companion object {
+            fun fromJson(text: String): Params? = runCatching {
+                val j = org.json.JSONObject(text)
+                Params(
+                    j.getDouble("k"), j.getDouble("errorCap"), j.getDouble("homeField"), j.getDouble("rest"),
+                    j.getDouble("regress"), j.getDouble("backupQb"), j.getDouble("sigma"), j.getDouble("blend"),
+                    j.optString("source", "re-tune"),
+                )
+            }.getOrNull()?.takeIf { it.sane() }
+        }
+    }
+
+    /** The numbers in use; the app swaps in a published re-tune at load. */
+    @Volatile var params = Params()
     /** Moneylines are published in games.csv from 2006. */
     const val LINES_FROM = 2006
 
@@ -80,8 +120,8 @@ object NflModel {
     enum class Tier(val label: String, val floor: Double) { LOCK("Lock", NflModel.LOCK), STRONG("Strong", NflModel.STRONG) }
 
     /** Home win probability for the pick: the market spread, nudged by the rating. */
-    fun pickHomeProb(modelMargin: Double, marketHomeMargin: Double?): Double =
-        winProb(if (marketHomeMargin == null) modelMargin else BLEND * modelMargin + (1 - BLEND) * marketHomeMargin)
+    fun pickHomeProb(modelMargin: Double, marketHomeMargin: Double?, p: Params = params): Double =
+        winProb(if (marketHomeMargin == null) modelMargin else p.blend * modelMargin + (1 - p.blend) * marketHomeMargin, p)
 
     fun tierFor(pickProb: Double): Tier? = Tier.entries.firstOrNull { pickProb >= it.floor }
 
@@ -211,7 +251,7 @@ object NflModel {
      * Walks every game in kickoff order and returns the pre-game prediction for each one, played
      * or not. Ratings only move after a game is played, so upcoming games use the latest ratings.
      */
-    fun replay(rows: List<Row>): List<Prediction> {
+    fun replay(rows: List<Row>, p: Params = params): List<Prediction> {
         val ordered = rows.sortedWith(compareBy<Row>({ it.gameday }, { it.gametime }, { it.gameId }))
         val ratings = HashMap<String, Double>()
         // Per team, this season's starts per QB, in first-start order (ties go to the earlier starter).
@@ -221,27 +261,27 @@ object NflModel {
         for (r in ordered) {
             if (r.season != season) {
                 season = r.season
-                ratings.replaceAll { _, v -> v * (1 - REGRESS) }
+                ratings.replaceAll { _, v -> v * (1 - p.regress) }
                 starts = HashMap()
             }
             fun qbPenalty(team: String, qb: String?): Double {
                 val c = starts[team] ?: return 0.0
                 if (qb == null || c.values.sum() < 2) return 0.0
-                return if (c.maxByOrNull { it.value }?.key != qb) BACKUP_QB else 0.0
+                return if (c.maxByOrNull { it.value }?.key != qb) p.backupQb else 0.0
             }
             val rh = ratings[r.home] ?: 0.0
             val ra = ratings[r.away] ?: 0.0
             val restEdge = ((r.homeRest ?: 7) - (r.awayRest ?: 7)).coerceIn(-7, 7) / 7.0
             val factors = Factors(
                 strength = rh - ra,
-                homeField = if (r.neutral) 0.0 else HOME_FIELD,
-                rest = REST * restEdge,
+                homeField = if (r.neutral) 0.0 else p.homeField,
+                rest = p.rest * restEdge,
                 quarterback = -qbPenalty(r.home, r.homeQb) + qbPenalty(r.away, r.awayQb),
             )
             val margin = factors.total
             out += Prediction(r, margin, factors)
             val result = r.result ?: continue
-            val delta = K * (result - margin).coerceIn(-ERROR_CAP, ERROR_CAP)
+            val delta = p.k * (result - margin).coerceIn(-p.errorCap, p.errorCap)
             ratings[r.home] = rh + delta
             ratings[r.away] = ra - delta
             for ((team, qb) in listOf(r.home to r.homeQb, r.away to r.awayQb)) {
@@ -253,7 +293,7 @@ object NflModel {
         return out
     }
 
-    fun winProb(homeMargin: Double): Double = phi(homeMargin / SIGMA)
+    fun winProb(homeMargin: Double, p: Params = params): Double = phi(homeMargin / p.sigma)
 
     /** Standard normal CDF (Abramowitz & Stegun 7.1.26, error < 1.5e-7). */
     internal fun phi(z: Double): Double {

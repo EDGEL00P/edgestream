@@ -1,0 +1,53 @@
+# Weekly NFL model re-tune. Pulls the latest nflverse schedule, re-fits the rating on every
+# season before the last three complete ones, and grades it on those three. model/nfl-params.json
+# changes only when the new numbers beat the ones in use there; the app picks them up within a day.
+name: NFL model re-tune
+
+on:
+  schedule:
+    - cron: "0 18 * * 2"   # Tuesdays 18:00 UTC, after Monday Night Football is final
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nfl-tune
+  cancel-in-progress: false
+
+jobs:
+  tune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Download nflverse schedules
+        run: curl -sSLf --retry 3 -o games.csv https://github.com/nflverse/nflverse-data/releases/download/schedules/games.csv
+
+      - name: Re-tune and grade on the holdout
+        env:
+          NFL_TUNE: "1"
+          NFL_GAMES: ${{ github.workspace }}/games.csv
+          NFL_PARAMS: ${{ github.workspace }}/model/nfl-params.json
+        run: |
+          set -o pipefail
+          chmod +x gradlew
+          ./gradlew :app:testDebugUnitTest --tests "com.edgestream.tv.data.NflTuningTest" --console=plain -i | grep -E "NFL re-tune|BUILD"
+
+      - name: Publish improved numbers
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add model/nfl-params.json 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "No improvement this week; numbers unchanged."
+          else
+            git commit -m "model: weekly NFL re-tune"
+            git push
+          fi

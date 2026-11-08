@@ -1,0 +1,16 @@
+{
+  "homeField": 2.5,
+  "sigma": 13.466561382795335,
+  "rest": 1,
+  "blend": 0.05,
+  "regress": 0.33,
+  "holdoutBrier": 0.21113172986575623,
+  "backupQb": 3,
+  "k": 0.06,
+  "source": "re-tune: fit 2002\u20132022, holdout 2023\u20132025",
+  "previousBrier": 0.2114721118324264,
+  "errorCap": 40,
+  "holdout": "2023-2025",
+  "tunedOn": "2026-11-08",
+  "holdoutGames": 854
+}
