@@ -1,5 +1,7 @@
 package com.edgestream.tv.ui.shell
 
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -319,8 +321,29 @@ private fun Band(
         }
         return
     }
-    val items = remember(rows) { rows.flatMap { r -> r.items.mapIndexed { i, it -> (if (i == 0) r.title else null) to it } } }
+    // Each card remembers its row; rows whose cards can be removed end with an Edit/Done card,
+    // so removing never needs a long-press.
+    val items = remember(rows) {
+        rows.flatMap { r ->
+            r.items.mapIndexed { i, it -> Triple(if (i == 0) r.title else null, it, r.title) }
+        }
+    }
+    val editRows = remember(rows) { rows.filter { removalFor(it.title) != null && it.items.isNotEmpty() }.map { it.title } }
     val requesters = remember(items) { items.associate { it.second.id to FocusRequester() } }
+    val editRequesters = remember(editRows) { editRows.associateWith { FocusRequester() } }
+    var editing by remember(tile) { mutableStateOf<String?>(null) }
+    if (editing != null && editing !in editRows) editing = null
+    val scope = rememberCoroutineScope()
+    fun remove(row: String, item: BandItem) {
+        when (removalFor(row)) {
+            Removal.FAVOURITE -> (item as? BandItem.Channel)?.let { vm.toggleFavorite(it.channel.key) }
+            Removal.RECENT -> (item as? BandItem.Channel)?.let { vm.removeRecent(it.channel.key) }
+            Removal.CONTINUE -> (item as? BandItem.Resume)?.let { vm.removeContinue(it.p.key) }
+            null -> Unit
+        }
+        // The removed card takes focus with it; land on the row's Done card instead of the dock.
+        scope.launch { kotlinx.coroutines.delay(150); runCatching { editRequesters[row]?.requestFocus() } }
+    }
     val first = requesters.getValue(items.first().second.id)
     key(tile) {
         val listState = rememberLazyListState()
@@ -335,7 +358,21 @@ private fun Band(
             contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            itemsIndexed(items, key = { _, it -> it.second.id }) { _, (header, item) ->
+            // Row by row. A removable row starts with its Edit/Done card: one press left of the
+            // first card, always on screen (at the far end, a long row left it out of focus's reach).
+            for (bandRow in rows) {
+            val row = bandRow.title
+            val editable = row in editRows
+            if (editable) item(key = "edit:$row") {
+                val editingRow = editing == row
+                Column {
+                    Text(row, color = Edge.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.height(24.dp))
+                    EditCard(editingRow, editRequesters.getValue(row)) { editing = if (editingRow) null else row }
+                }
+            }
+            itemsIndexed(bandRow.items, key = { _, it -> it.id }) { i, item ->
+                val header = if (i == 0 && !editable) row else null
+                val editingRow = editing == row
                 Column(Modifier.onFocusChanged { if (it.hasFocus) onFocusItem(item) }) {
                     Text(header ?: "", color = Edge.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.height(24.dp))
                     val req = requesters.getValue(item.id)
@@ -345,16 +382,18 @@ private fun Band(
                             val ch = vm.preview.value
                             if (ch != null) vm.playChannel(ch, vm.zapListFor(ch)) else onEvent(ShellEvent.Open(Tile.SPORTS))
                         }
-                        is BandItem.Channel -> ChannelCard(item, req,
-                            onClick = { vm.playChannel(item.channel, item.row) },
-                            onRemove = { vm.removeRecent(item.channel.key) })
-                        is BandItem.Resume -> ResumeCard(item, req, onClick = { vm.resume(item.p) }, onRemove = { vm.removeContinue(item.p.key) })
+                        is BandItem.Channel -> ChannelCard(item, req, editingRow,
+                            onClick = { if (editingRow) remove(row, item) else vm.playChannel(item.channel, item.row) },
+                            onRemove = { remove(row, item) }.takeIf { removalFor(row) != null })
+                        is BandItem.Resume -> ResumeCard(item, req, editingRow,
+                            onClick = { if (editingRow) remove(row, item) else vm.resume(item.p) }, onRemove = { remove(row, item) })
                         is BandItem.Watch -> WatchCard(item, req) { vm.openWatchItem(item.item) }
                         is BandItem.Vod -> VodCard(item, req) { vm.vodDetail.value = item.item }
                         is BandItem.Alert -> AlertCard(item, req) { onEvent(ShellEvent.Open(Tile.WEATHER)) }
                         is BandItem.Day -> DayCard(item, settings.fahrenheit, req) { onEvent(ShellEvent.Open(Tile.WEATHER)) }
                     }
                 }
+            }
             }
         }
     }

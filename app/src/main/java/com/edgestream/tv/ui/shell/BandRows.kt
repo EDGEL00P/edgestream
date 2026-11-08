@@ -23,6 +23,17 @@ sealed interface BandItem {
 
 data class BandRow(val title: String, val items: List<BandItem>)
 
+/** What "remove" means in a row: un-favourite, forget a watched channel, or drop a resume point. */
+enum class Removal { FAVOURITE, RECENT, CONTINUE }
+
+/** The removal a row supports, or null when its cards can't be removed. */
+fun removalFor(rowTitle: String): Removal? = when (rowTitle) {
+    "Favourites" -> Removal.FAVOURITE
+    "Recently watched" -> Removal.RECENT
+    "Continue watching" -> Removal.CONTINUE
+    else -> null
+}
+
 /** Everything the band can show, gathered from the view model's existing flows (no new network calls). */
 data class BandInputs(
     val games: List<Sports.Game>,

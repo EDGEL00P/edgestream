@@ -1,5 +1,9 @@
 package com.edgestream.tv.ui.shell
 
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -99,7 +103,7 @@ fun BandCard(
     ) {
         // Accent bottom edge (orange/gradient like screenshot), always present.
         Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp)
-            .background(Brush.horizontalGradient(listOf(Color(0xFFE6512A), Color(0xFF2F6FB5)))))
+            .background(Brush.horizontalGradient(listOf(Edge.Accent, Edge.Accent2))))
         content(focused)
     }
 }
@@ -143,7 +147,7 @@ fun GameCard(g: Sports.Game, requester: FocusRequester, onClick: () -> Unit) {
 }
 
 @Composable
-fun ChannelCard(item: BandItem.Channel, requester: FocusRequester, onClick: () -> Unit, onRemove: (() -> Unit)? = null) {
+fun ChannelCard(item: BandItem.Channel, requester: FocusRequester, editing: Boolean, onClick: () -> Unit, onRemove: (() -> Unit)? = null) {
     BandCard(228.dp, requester, onClick, onLongClick = onRemove) {
         AsyncImage(item.channel.logo, item.channel.name, Modifier.align(Alignment.Center).padding(bottom = 26.dp).size(width = 120.dp, height = 60.dp),
             contentScale = ContentScale.Fit)
@@ -152,25 +156,48 @@ fun ChannelCard(item: BandItem.Channel, requester: FocusRequester, onClick: () -
             item.now?.let {
                 Text(it, color = Color.White.copy(alpha = SECONDARY_TEXT_ALPHA), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (onRemove != null) Text("Hold OK to remove", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
-                modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 6.dp, vertical = 2.dp))
+        }
+        if (editing) RemoveBadge()
+    }
+}
+
+/** Shown on every card of a row in edit mode: OK removes this one. */
+@Composable
+private fun BoxScope.RemoveBadge() {
+    Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.55f)), contentAlignment = Alignment.Center) {
+        Text(
+            "Remove", color = Edge.OnAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Edge.Live).padding(horizontal = 12.dp, vertical = 5.dp),
+        )
+    }
+}
+
+/** The end of a removable row: OK switches the row into edit mode (Edit) and back out (Done). */
+@Composable
+fun EditCard(editing: Boolean, requester: FocusRequester, onClick: () -> Unit) {
+    BandCard(120.dp, requester, onClick) {
+        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                if (editing) Icons.Rounded.Check else Icons.Rounded.Edit, null,
+                tint = Edge.Text, modifier = Modifier.size(28.dp),
+            )
+            Text(if (editing) "Done" else "Edit", color = Edge.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
         }
     }
 }
 
 @Composable
-fun ResumeCard(item: BandItem.Resume, requester: FocusRequester, onClick: () -> Unit, onRemove: () -> Unit) {
+fun ResumeCard(item: BandItem.Resume, requester: FocusRequester, editing: Boolean, onClick: () -> Unit, onRemove: () -> Unit) {
     val p = item.p
-    // A poster like every other title card; only a thin progress line, no text. Long-press removes.
+    // A poster like every other title card; only a thin progress line. The row's Edit card (or a
+    // long-press) removes it.
     BandCard(86.dp, requester, onClick, onLongClick = onRemove) {
         AsyncImage(p.poster, p.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         val frac = if (p.durationMs > 0) (p.positionMs.toFloat() / p.durationMs).coerceIn(0f, 1f) else 0f
         Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Color.Black.copy(alpha = 0.5f))) {
             Box(Modifier.fillMaxHeight().fillMaxWidth(frac).background(Edge.Accent))
         }
-        Text("Hold OK to remove", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.align(Alignment.BottomStart).padding(start = 6.dp, bottom = 10.dp)
-                .clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 6.dp, vertical = 2.dp))
+        if (editing) RemoveBadge()
     }
 }
 

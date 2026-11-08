@@ -79,4 +79,12 @@ class BandRowsTest {
         assertEquals(listOf("Warnings", "Forecast"), rows.map { it.title })
         assertEquals(listOf("day:2026-11-08", "day:2026-11-09"), rows[1].items.map { it.id })
     }
+
+    @Test fun eachRemovableRowRemovesTheRightThing() {
+        // Favourites un-favourite; they must never delete watch history.
+        assertEquals(Removal.FAVOURITE, removalFor("Favourites"))
+        assertEquals(Removal.RECENT, removalFor("Recently watched"))
+        assertEquals(Removal.CONTINUE, removalFor("Continue watching"))
+        assertEquals(null, removalFor("On Now"))
+    }
 }
