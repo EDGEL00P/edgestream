@@ -1,0 +1,28 @@
+name: Bug report
+description: Something on the TV doesn't work as it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open TV Guide\n2. Press OK on …"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      placeholder: "SHIELD TV Pro 2019 / Fire TV Cube"
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Settings › Remote & About

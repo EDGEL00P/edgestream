@@ -1,0 +1,22 @@
+# Build output
+.gradle/
+.kotlin/
+build/
+
+# Machine-specific settings and editor state
+local.properties
+.idea/
+*.iml
+.vscode/
+.history/
+
+# Device captures and scratch output
+.code-backups/
+.tmp/
+tv_screen.png
+dummy_*.json
+exp_out*.json
+
+# Python bytecode
+__pycache__/
+*.pyc

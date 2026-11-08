@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Real Edge launcher banner: teal/blue stripes + E. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp" android:height="180dp"
+    android:viewportWidth="320" android:viewportHeight="180">
+    <path android:fillColor="#FF0B0F1A" android:pathData="M0,0h320v180h-320z" />
+    <path android:fillColor="#FF2DD4BF" android:pathData="M0,180L120,0h28L28,180z" />
+    <path android:fillColor="#FF38BDF8" android:pathData="M44,180L164,0h12L56,180z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M188,64h56v10h-44v12h38v10h-38v14h44v10h-56z" />
+</vector>

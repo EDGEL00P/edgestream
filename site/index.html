@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EdgeStream: Sports-first live TV for Android TV</title>
+  <meta name="description" content="EdgeStream is a sports-first TV app for Android TV: a real TV guide, every game matched to the channel showing it, and an on-demand library, built for the remote and 4K screens.">
+  <meta name="theme-color" content="#050505">
+  <meta property="og:title" content="EdgeStream">
+  <meta property="og:description" content="Sports-first live TV and on demand for Android TV.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="assets/img/social-preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="assets/fonts/Inter.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="assets/fonts/BebasNeue.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="nav" id="top">
+    <div class="wrap nav-row">
+      <a class="brand" href="#top" aria-label="EdgeStream home">
+        <img src="assets/img/mark.svg" alt="" width="30" height="29">
+        <span class="wordmark">EDGE<span>STREAM</span></span>
+      </a>
+      <nav class="links" aria-label="Sections">
+        <a href="#guide">TV Guide</a>
+        <a href="#sports">Sports</a>
+        <a href="#on-demand">On Demand</a>
+        <a href="#home">Around the house</a>
+        <a href="#security">Security</a>
+      </nav>
+      <a class="btn btn-small" href="#screens">See it</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">For Android TV</p>
+          <h1>Every game.<br><span>The right channel.</span></h1>
+          <p class="lede">EdgeStream is a sports-first TV app built for the remote and a 4K screen: a real
+            TV guide, every match found on the channel showing it, and an on-demand library, all running on
+            the TV itself.</p>
+          <div class="cta">
+            <a class="btn" href="#screens">Take the tour</a>
+            <a class="btn btn-ghost" href="#sports">How matching works</a>
+          </div>
+          <ul class="facts" aria-label="At a glance">
+            <li><strong>40+</strong><span>leagues</span></li>
+            <li><strong>4K</strong><span>and HDR playback</span></li>
+            <li><strong>0</strong><span>servers to run</span></li>
+          </ul>
+        </div>
+        <figure class="tv">
+          <img src="assets/img/on-demand.jpg" alt="EdgeStream On Demand screen with full-screen artwork and Continue Watching" width="1600" height="900">
+        </figure>
+      </div>
+    </section>
+
+    <section class="band" id="guide">
+      <div class="wrap split">
+        <div>
+          <p class="eyebrow">TV Guide</p>
+          <h2>Channels that behave like real TV.</h2>
+          <p>Bring a playlist or portal login and EdgeStream turns it into a proper lineup. Channel
+            numbers follow real broadcast numbering for each country, so <kbd>1</kbd><kbd>0</kbd><kbd>1</kbd>
+            on the remote is BBC One HD, every time.</p>
+          <ul class="ticks">
+            <li>Every channel resolved to its real name, logo, category and country</li>
+            <li>A guide merged from several sources, with catch-up where offered</li>
+            <li>Names that could mean two channels are left alone, never guessed</li>
+          </ul>
+        </div>
+        <figure class="shot"><img src="assets/img/player.jpg" alt="Live channel with what's on now, the live score and player controls" loading="lazy" width="1600" height="900"></figure>
+      </div>
+    </section>
+
+    <section class="band alt" id="sports">
+      <div class="wrap split reverse">
+        <div>
+          <p class="eyebrow">Sports</p>
+          <h2>Press OK on a game. Watch the game.</h2>
+          <p>Scores, fixtures, standings and odds for 40+ leagues, and every game already knows where
+            it's on. EdgeStream checks, in order:</p>
+          <ol class="steps">
+            <li><b>Your pick</b><span>Saved for that game or that team.</span></li>
+            <li><b>The event channel</b><span>That exact match: kick-off time and competition both checked.</span></li>
+            <li><b>The TV guide</b><span>A channel whose listing names both teams at kick-off.</span></li>
+            <li><b>The broadcaster</b><span>The network listed as carrying it.</span></li>
+          </ol>
+        </div>
+        <figure class="shot"><img src="assets/img/sports.jpg" alt="Sports hub listing games with the channel each one is on" loading="lazy" width="1600" height="900"></figure>
+      </div>
+    </section>
+
+    <section class="band" id="on-demand">
+      <div class="wrap split">
+        <div>
+          <p class="eyebrow">On Demand</p>
+          <h2>Your collections, on the big screen.</h2>
+          <p>Curated collections with their own artwork, defined remotely and changed without an
+            update. Press Play and EdgeStream finds the best copy from your own sources: your home
+            media server first, then your provider, then your add-ons.</p>
+          <ul class="ticks">
+            <li>Continue Watching, My List and Up Next with a timed autoplay</li>
+            <li>Online subtitles, found automatically when you want them</li>
+            <li>Stream quality at a glance before you press play</li>
+          </ul>
+        </div>
+        <figure class="shot"><img src="assets/img/collections.jpg" alt="Collections with curated cover art" loading="lazy" width="1600" height="900"></figure>
+      </div>
+    </section>
+
+    <section class="band alt" id="home">
+      <div class="wrap">
+        <p class="eyebrow center">Around the house</p>
+        <h2 class="center">Built for the whole living room.</h2>
+        <div class="cards">
+          <article class="card">
+            <h3>Phone remote</h3>
+            <p>Scan a code and your phone becomes a remote: D-pad, typing and voice. Ask
+              <em>"what's on Fox League?"</em> or <em>"when do the Broncos play?"</em></p>
+          </article>
+          <article class="card">
+            <h3>Move to another TV</h3>
+            <p>Copy providers, settings, profiles and your lists to a second TV with a six-digit code.</p>
+          </article>
+          <article class="card">
+            <h3>Weather and planner</h3>
+            <p>Local weather and storm radar, plus a planner that reminds you before the game starts.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="screens">
+      <div class="wrap">
+        <p class="eyebrow center">The tour</p>
+        <h2 class="center">One look, on every screen.</h2>
+        <div class="gallery">
+          <figure><img src="assets/img/home.jpg" alt="Home screen" loading="lazy" width="1600" height="900"><figcaption>Home</figcaption></figure>
+          <figure><img src="assets/img/sports.jpg" alt="Sports" loading="lazy" width="1600" height="900"><figcaption>Sports</figcaption></figure>
+          <figure><img src="assets/img/on-demand.jpg" alt="On Demand" loading="lazy" width="1600" height="900"><figcaption>On Demand</figcaption></figure>
+          <figure><img src="assets/img/collections.jpg" alt="Collections" loading="lazy" width="1600" height="900"><figcaption>Collections</figcaption></figure>
+          <figure><img src="assets/img/player.jpg" alt="Player" loading="lazy" width="1600" height="900"><figcaption>Player</figcaption></figure>
+          <figure><img src="assets/img/settings.jpg" alt="Settings" loading="lazy" width="1600" height="900"><figcaption>Settings</figcaption></figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="band alt" id="security">
+      <div class="wrap">
+        <p class="eyebrow center">Security</p>
+        <h2 class="center">Private by design.</h2>
+        <div class="cards four">
+          <article class="card"><h3>Encrypted at rest</h3><p>The whole database is encrypted, with its key held by the TV's secure hardware.</p></article>
+          <article class="card"><h3>Sealed secrets</h3><p>Logins and keys you type are sealed one by one, never stored in plain text.</p></article>
+          <article class="card"><h3>End-to-end remote</h3><p>The phone link is encrypted with a key that only travels inside the pairing code.</p></article>
+          <article class="card"><h3>No account, no cloud</h3><p>Everything runs on the TV. There is no EdgeStream server to sign in to.</p></article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-row">
+      <a class="brand" href="#top" aria-label="Back to top">
+        <img src="assets/img/mark.svg" alt="" width="24" height="23">
+        <span class="wordmark small">EDGE<span>STREAM</span></span>
+      </a>
+      <p>© 2026 EDGEL00P. All rights reserved. EdgeStream ships no channels, films or series: you bring your own sources.</p>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,14 @@
+<resources>
+    <!-- Android 12+ system splash: the EdgeStream mark on the house background, instantly at
+         cold start, before the first frame. Older devices show the plain window background. -->
+    <style name="Theme.EdgeStream" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/edge_bg</item>
+        <item name="android:colorBackground">@color/edge_bg</item>
+        <item name="android:statusBarColor">@color/edge_bg</item>
+        <item name="android:navigationBarColor">@color/edge_bg</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowSplashScreenBackground">@color/edge_bg</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/edge_bg</item>
+    </style>
+</resources>

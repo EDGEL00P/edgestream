@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- IPTV providers commonly serve playlists, guides and streams over plain HTTP, so cleartext
+     must stay allowed. Only the system trust store is trusted in release builds: a user-installed
+     CA (e.g. a proxy's) is trusted in debug builds only, via debug-overrides. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

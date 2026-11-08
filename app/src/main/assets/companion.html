@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<title>EdgeStream</title>
+<style>
+  /* Colours arrive from the TV's current broadcaster theme (/api/state → theme); these are only
+     the first paint. */
+  :root {
+    --bg: #0b0d12; --panel: #151821; --panel-hi: #1e2230; --line: #2a2f3d;
+    --text: #f3f4f6; --dim: #a3a8b6; --faint: #6b7180; --accent: #e31b23; --on-accent: #ffffff;
+    --ok: #34c77b; --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; color: var(--text); background: var(--bg);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding: env(safe-area-inset-top) 0 calc(76px + env(safe-area-inset-bottom));
+    min-height: 100vh;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { border: 0; background: none; cursor: pointer; padding: 0; }
+  svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  [hidden] { display: none !important; }
+
+  /* header */
+  .top { display: flex; align-items: center; gap: 10px; padding: 14px 20px; }
+  .brand { width: 26px; height: 25px; fill: var(--accent); }
+  .top h1 { font-size: 17px; font-weight: 650; letter-spacing: -.01em; margin: 0; }
+  .status { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim); }
+  .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+  .status.on::before { background: var(--ok); }
+  .status svg.i { width: 14px; height: 14px; }
+
+  /* the TV's selected text box */
+  .ask-tv { position: sticky; top: 0; z-index: 3; margin: 0 16px 8px; padding: 14px; border-radius: var(--radius);
+    background: var(--panel); border: 1px solid var(--accent); box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+  .ask-tv .label { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+
+  main { padding: 0 20px; }
+  section { display: none; } section.active { display: block; }
+  h2 { font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); margin: 24px 0 10px; }
+
+  /* inputs */
+  .field { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 0 6px 0 14px; min-height: 50px; }
+  .field:focus-within { border-color: var(--accent); }
+  .field input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; padding: 13px 0; }
+  .field input::placeholder { color: var(--faint); }
+  .field > svg.i { color: var(--faint); }
+  .icon-btn { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: var(--dim); }
+  .icon-btn:active, .icon-btn.live { color: var(--on-accent); background: var(--accent); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 18px;
+    border-radius: 12px; font-weight: 600; background: var(--accent); color: var(--on-accent); }
+  .btn:active { filter: brightness(.92); }
+  .btn[disabled] { opacity: .55; }
+  .btn.block { width: 100%; margin-top: 18px; }
+  .btn.small { min-height: 40px; padding: 0 14px; }
+  label { display: block; font-size: 13px; font-weight: 500; color: var(--dim); margin: 16px 0 6px; }
+  .note { font-size: 13px; color: var(--dim); margin: 8px 2px 0; min-height: 19px; }
+  .note.err { color: var(--accent); }
+  .note.good { color: var(--ok); }
+  .banner { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: var(--panel);
+    border: 1px solid var(--line); color: var(--dim); font-size: 13px; margin-top: 8px; }
+  .banner svg.i { width: 18px; height: 18px; color: var(--accent); margin-top: 1px; }
+
+  /* remote */
+  .pad { position: relative; width: min(74vw, 272px); aspect-ratio: 1; margin: 28px auto 8px; border-radius: 50%;
+    background: var(--panel); border: 1px solid var(--line); }
+  .pad button { position: absolute; width: 34%; height: 34%; display: grid; place-items: center; color: var(--dim); }
+  .pad button:active { color: var(--accent); }
+  .pad .up { top: 0; left: 33%; } .pad .down { bottom: 0; left: 33%; }
+  .pad .left { left: 0; top: 33%; } .pad .right { right: 0; top: 33%; }
+  .pad .ok { left: 33%; top: 33%; border-radius: 50%; background: var(--panel-hi); border: 1px solid var(--line);
+    color: var(--text); font-weight: 650; font-size: 15px; letter-spacing: .04em; }
+  .pad .ok:active { background: var(--accent); color: var(--on-accent); }
+  .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 20px; }
+  .key { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 64px;
+    border-radius: 12px; background: var(--panel); border: 1px solid var(--line); color: var(--text); }
+  .key span { font-size: 11px; color: var(--dim); }
+  .key:active { border-color: var(--accent); background: var(--panel-hi); }
+  .num { font-size: 20px; font-weight: 500; min-height: 56px; }
+  details { margin-top: 18px; }
+  summary { list-style: none; display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 14px; cursor: pointer; padding: 6px 2px; }
+  summary::-webkit-details-marker { display: none; }
+  summary svg.i { width: 18px; height: 18px; transition: transform .2s; }
+  details[open] summary svg.i { transform: rotate(90deg); }
+
+  /* channels */
+  .list { margin-top: 10px; }
+  .ch { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 10px 2px; border-bottom: 1px solid var(--line); }
+  .ch:active { background: var(--panel); }
+  .ch .n { width: 36px; text-align: right; font-size: 13px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .ch img, .ch .ph { width: 56px; height: 36px; object-fit: contain; border-radius: 6px; background: var(--panel); flex: none; }
+  .ch .t { min-width: 0; flex: 1; }
+  .ch .t b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ch .t span { display: block; font-size: 13px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ch > svg.i { color: var(--faint); width: 18px; height: 18px; }
+  .empty { text-align: center; color: var(--dim); padding: 40px 0; }
+
+  /* providers */
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+  .seg button { padding: 10px; border-radius: 9px; font-size: 14px; font-weight: 500; color: var(--dim); }
+  .seg button.on { background: var(--panel-hi); color: var(--text); }
+  .source { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .source b { font-weight: 600; }
+  .source div { font-size: 13px; color: var(--dim); margin-top: 2px; }
+  .source .bad { color: var(--accent); }
+
+  /* pairing */
+  .pair { padding: 32px 24px; text-align: center; }
+  .pair svg.big { width: 64px; height: 64px; color: var(--accent); }
+  .pair h2 { font-size: 22px; text-transform: none; letter-spacing: -.01em; color: var(--text); margin: 18px 0 8px; }
+  .pair p { color: var(--dim); margin: 0 auto 22px; max-width: 320px; }
+  .pair .field { max-width: 300px; margin: 0 auto; }
+
+  /* tab bar */
+  nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; display: grid; grid-template-columns: repeat(3, 1fr);
+    background: var(--panel); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+  nav button { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 0 12px; font-size: 11px; font-weight: 500; color: var(--faint); }
+  nav button.active { color: var(--accent); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h5v-6h4v6h5V9.5"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-playpause" viewBox="0 0 24 24"><path d="m4 5 8 7-8 7z"/><path d="M15 5v14M20 5v14"/></symbol>
+  <symbol id="i-rew" viewBox="0 0 24 24"><path d="m11 6-7 6 7 6z"/><path d="m20 6-7 6 7 6z"/></symbol>
+  <symbol id="i-ff" viewBox="0 0 24 24"><path d="m13 6 7 6-7 6z"/><path d="m4 6 7 6-7 6z"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-remote" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="3"/><circle cx="12" cy="8" r="2"/><path d="M10 14h.01M14 14h.01M10 17.5h.01M14 17.5h.01"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 21h8"/><path d="m10 9 4 3-4 3z"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v.01M14 21h7v-4"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-dial" viewBox="0 0 24 24"><path d="M6 5h.01M12 5h.01M18 5h.01M6 11h.01M12 11h.01M18 11h.01M6 17h.01M12 17h.01M18 17h.01M12 22h.01"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+</svg>
+<header class="top">
+  <svg class="brand" viewBox="0 0 52 50" aria-hidden="true"><path d="M1,49L29,1h10L11,49z"/><path d="M27,15h24v6h-18v6h15v6h-15v6h18v6h-24z"/></svg>
+  <h1>EdgeStream</h1>
+  <span class="status" id="status">Connecting…</span>
+</header>
+
+<div class="pair" id="pair" hidden>
+  <svg class="i big"><use href="#i-qr"/></svg>
+  <h2>Scan the code on your TV</h2>
+  <p>Open your phone camera and point it at the QR code in EdgeStream (the phone icon in the dock, or Settings › Remote). That pairs this phone securely.</p>
+  <form class="field" id="pairForm" autocomplete="off">
+    <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="Or enter the 6-digit code">
+    <button class="btn small">Pair</button>
+  </form>
+  <div class="note err" id="pairMsg"></div>
+  <p class="note">A code alone gives you the remote buttons. Typing and adding providers need the QR code, which carries the encryption key.</p>
+</div>
+
+<form class="ask-tv" id="fieldBar" hidden autocomplete="off">
+  <div class="label" id="fieldLabel">The TV is asking for text</div>
+  <div class="field">
+    <input id="fieldInput" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send">
+    <button class="icon-btn" aria-label="Send to TV"><svg class="i"><use href="#i-send"/></svg></button>
+  </div>
+  <div class="note" id="fieldMsg"></div>
+</form>
+
+<main id="app" hidden>
+  <div class="banner" id="codeOnly" hidden>
+    <svg class="i"><use href="#i-lock"/></svg>
+    <div>Remote buttons only. Scan the QR code on the TV to type, search, speak and add providers. It's encrypted end to end.</div>
+  </div>
+
+  <section id="remote" class="active">
+    <form class="field" id="askForm" autocomplete="off" style="margin-top:8px">
+      <svg class="i"><use href="#i-search"/></svg>
+      <input id="ask" type="search" enterkeyhint="go" placeholder="Say or type “101”, “watch ESPN”, a show…">
+      <button type="button" class="icon-btn" id="micBtn" aria-label="Speak"><svg class="i"><use href="#i-mic"/></svg></button>
+    </form>
+    <div class="note" id="askMsg"></div>
+
+    <div class="pad">
+      <button class="up" data-key="up" aria-label="Up"><svg class="i"><use href="#i-up"/></svg></button>
+      <button class="left" data-key="left" aria-label="Left"><svg class="i"><use href="#i-left"/></svg></button>
+      <button class="ok" data-key="ok">OK</button>
+      <button class="right" data-key="right" aria-label="Right"><svg class="i"><use href="#i-right"/></svg></button>
+      <button class="down" data-key="down" aria-label="Down"><svg class="i"><use href="#i-down"/></svg></button>
+    </div>
+
+    <div class="keys">
+      <button class="key" data-key="back"><svg class="i"><use href="#i-back"/></svg><span>Back</span></button>
+      <button class="key" data-open="HOME"><svg class="i"><use href="#i-home"/></svg><span>Home</span></button>
+      <button class="key" data-key="menu"><svg class="i"><use href="#i-menu"/></svg><span>Options</span></button>
+      <button class="key" data-key="rew"><svg class="i"><use href="#i-rew"/></svg><span>Rewind</span></button>
+      <button class="key" data-key="playpause"><svg class="i"><use href="#i-playpause"/></svg><span>Play / Pause</span></button>
+      <button class="key" data-key="ff"><svg class="i"><use href="#i-ff"/></svg><span>Forward</span></button>
+      <button class="key" data-key="chdown"><svg class="i"><use href="#i-minus"/></svg><span>Channel</span></button>
+      <button class="key" data-key="info"><svg class="i"><use href="#i-info"/></svg><span>Info</span></button>
+      <button class="key" data-key="chup"><svg class="i"><use href="#i-plus"/></svg><span>Channel</span></button>
+    </div>
+
+    <details>
+      <summary><svg class="i"><use href="#i-chev"/></svg>Number pad</summary>
+      <div class="keys">
+        <button class="key num" data-key="1">1</button><button class="key num" data-key="2">2</button><button class="key num" data-key="3">3</button>
+        <button class="key num" data-key="4">4</button><button class="key num" data-key="5">5</button><button class="key num" data-key="6">6</button>
+        <button class="key num" data-key="7">7</button><button class="key num" data-key="8">8</button><button class="key num" data-key="9">9</button>
+        <span></span><button class="key num" data-key="0">0</button><button class="key" data-key="del"><svg class="i"><use href="#i-back"/></svg><span>Delete</span></button>
+      </div>
+    </details>
+  </section>
+
+  <section id="channels">
+    <div class="field" style="margin-top:8px">
+      <svg class="i"><use href="#i-search"/></svg>
+      <input id="chSearch" type="search" placeholder="Search channels" enterkeyhint="search">
+    </div>
+    <div class="list" id="chList"></div>
+  </section>
+
+  <section id="providers">
+    <h2>Add a provider</h2>
+    <div class="seg" id="typeSeg">
+      <button class="on" data-type="xtream">Xtream Codes</button>
+      <button data-type="m3u">M3U playlist</button>
+    </div>
+    <form id="srcForm" autocomplete="off">
+      <label for="srcName">Name</label>
+      <div class="field"><input id="srcName" name="name" placeholder="My provider"></div>
+      <label for="srcUrl" id="urlLabel">Server address</label>
+      <div class="field"><input id="srcUrl" name="url" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="http://example.com:8080" required></div>
+      <div id="creds">
+        <label for="srcUser">Username</label>
+        <div class="field"><input id="srcUser" name="username" autocapitalize="off" spellcheck="false"></div>
+        <label for="srcPass">Password</label>
+        <div class="field"><input id="srcPass" name="password" type="password"></div>
+      </div>
+      <label for="srcEpg">TV guide address (optional)</label>
+      <div class="field"><input id="srcEpg" name="epg" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="Uses the provider's own guide"></div>
+      <button class="btn block" id="srcBtn">Check login &amp; add to TV</button>
+      <div class="note" id="srcMsg"></div>
+    </form>
+    <div class="banner"><svg class="i"><use href="#i-lock"/></svg><div>Encrypted on this phone with the key from the QR code, sent only to your TV over your home network, and stored encrypted there.</div></div>
+    <h2>On the TV</h2>
+    <div id="sources"></div>
+  </section>
+</main>
+
+<nav id="nav" hidden>
+  <button class="active" data-tab="remote"><svg class="i"><use href="#i-remote"/></svg>Remote</button>
+  <button data-tab="channels"><svg class="i"><use href="#i-list"/></svg>Channels</button>
+  <button data-tab="providers"><svg class="i"><use href="#i-server"/></svg>Providers</button>
+</nav>
+<script>
+(() => {
+  "use strict";
+  // <crypto> AES-256-GCM, the TV's LinkCipher format: base64(iv ‖ ciphertext ‖ tag).
+  // Plain JS because browsers withhold WebCrypto from http pages; only getRandomValues is needed.
+  const Gcm = (() => {
+    const SBOX = new Uint8Array(256);
+    {
+      const rotl = (x, s) => ((x << s) | (x >>> (8 - s))) & 0xff;
+      let p = 1, q = 1;
+      do {
+        p = (p ^ (p << 1) ^ (p & 0x80 ? 0x1b : 0)) & 0xff;
+        q = (q ^ (q << 1)) & 0xff; q = (q ^ (q << 2)) & 0xff; q = (q ^ (q << 4)) & 0xff;
+        if (q & 0x80) q ^= 0x09;
+        SBOX[p] = q ^ rotl(q, 1) ^ rotl(q, 2) ^ rotl(q, 3) ^ rotl(q, 4) ^ 0x63;
+      } while (p !== 1);
+      SBOX[0] = 0x63;
+    }
+    const xtime = b => ((b << 1) ^ (b & 0x80 ? 0x1b : 0)) & 0xff;
+
+    function expand(key) {
+      const w = new Uint8Array(240);
+      w.set(key);
+      let rcon = 1;
+      for (let i = 32; i < 240; i += 4) {
+        let t = [w[i - 4], w[i - 3], w[i - 2], w[i - 1]];
+        if (i % 32 === 0) { t = [SBOX[t[1]] ^ rcon, SBOX[t[2]], SBOX[t[3]], SBOX[t[0]]]; rcon = xtime(rcon); }
+        else if (i % 32 === 16) t = t.map(b => SBOX[b]);
+        for (let j = 0; j < 4; j++) w[i + j] = w[i - 32 + j] ^ t[j];
+      }
+      return w;
+    }
+
+    function encryptBlock(rk, block) {
+      let s = new Uint8Array(16);
+      for (let i = 0; i < 16; i++) s[i] = block[i] ^ rk[i];
+      for (let r = 1; r <= 14; r++) {
+        const t = new Uint8Array(16);
+        for (let c = 0; c < 4; c++) for (let row = 0; row < 4; row++) t[c * 4 + row] = SBOX[s[((c + row) % 4) * 4 + row]];
+        if (r < 14) for (let c = 0; c < 16; c += 4) {
+          const a0 = t[c], a1 = t[c + 1], a2 = t[c + 2], a3 = t[c + 3], all = a0 ^ a1 ^ a2 ^ a3;
+          t[c] ^= all ^ xtime(a0 ^ a1); t[c + 1] ^= all ^ xtime(a1 ^ a2);
+          t[c + 2] ^= all ^ xtime(a2 ^ a3); t[c + 3] ^= all ^ xtime(a3 ^ a0);
+        }
+        for (let i = 0; i < 16; i++) t[i] ^= rk[r * 16 + i];
+        s = t;
+      }
+      return s;
+    }
+
+    function gmul(x, y) {
+      const z = new Uint8Array(16), v = y.slice();
+      for (let i = 0; i < 128; i++) {
+        if (x[i >> 3] & (0x80 >> (i & 7))) for (let j = 0; j < 16; j++) z[j] ^= v[j];
+        const lsb = v[15] & 1;
+        for (let j = 15; j > 0; j--) v[j] = (v[j] >>> 1) | ((v[j - 1] & 1) << 7);
+        v[0] >>>= 1;
+        if (lsb) v[0] ^= 0xe1;
+      }
+      return z;
+    }
+
+    function ghash(h, data) {
+      let x = new Uint8Array(16);
+      const blocks = Math.ceil(data.length / 16);
+      for (let b = 0; b < blocks; b++) {
+        for (let i = 0; i < 16; i++) x[i] ^= data[b * 16 + i] || 0;
+        x = gmul(x, h);
+      }
+      const len = new Uint8Array(16), bits = data.length * 8;
+      len[12] = (bits >>> 24) & 0xff; len[13] = (bits >>> 16) & 0xff; len[14] = (bits >>> 8) & 0xff; len[15] = bits & 0xff;
+      len[11] = Math.floor(bits / 0x100000000) & 0xff;
+      for (let i = 0; i < 16; i++) x[i] ^= len[i];
+      return gmul(x, h);
+    }
+
+    function ctr(rk, iv, data) {
+      const out = new Uint8Array(data.length), counter = new Uint8Array(16);
+      counter.set(iv);
+      for (let off = 0, n = 2; off < data.length; off += 16, n++) {
+        counter[12] = (n >>> 24) & 0xff; counter[13] = (n >>> 16) & 0xff; counter[14] = (n >>> 8) & 0xff; counter[15] = n & 0xff;
+        const ks = encryptBlock(rk, counter);
+        for (let i = 0; i < 16 && off + i < data.length; i++) out[off + i] = data[off + i] ^ ks[i];
+      }
+      return out;
+    }
+
+    function tagFor(rk, iv, cipher) {
+      const j0 = new Uint8Array(16);
+      j0.set(iv); j0[15] = 1;
+      const s = ghash(encryptBlock(rk, new Uint8Array(16)), cipher), e = encryptBlock(rk, j0);
+      return s.map((b, i) => b ^ e[i]);
+    }
+
+    const toB64 = bytes => { let s = ""; for (const b of bytes) s += String.fromCharCode(b); return btoa(s); };
+    const fromB64 = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
+
+    return {
+      keyFromText(text) {
+        const bytes = fromB64(text.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - text.length % 4) % 4));
+        return bytes.length === 32 ? expand(bytes) : null;
+      },
+      seal(rk, plain, iv = crypto.getRandomValues(new Uint8Array(12))) {
+        const cipher = ctr(rk, iv, new TextEncoder().encode(plain));
+        const out = new Uint8Array(12 + cipher.length + 16);
+        out.set(iv); out.set(cipher, 12); out.set(tagFor(rk, iv, cipher), 12 + cipher.length);
+        return toB64(out);
+      },
+      open(rk, sealed) {
+        const bytes = fromB64(sealed);
+        if (bytes.length < 28) return null;
+        const iv = bytes.subarray(0, 12), cipher = bytes.subarray(12, bytes.length - 16), tag = bytes.subarray(bytes.length - 16);
+        const want = tagFor(rk, iv, cipher);
+        let diff = 0;
+        for (let i = 0; i < 16; i++) diff |= want[i] ^ tag[i];
+        return diff ? null : new TextDecoder().decode(ctr(rk, iv, cipher));
+      },
+    };
+  })();
+  // </crypto>
+
+  const $ = s => document.querySelector(s);
+  const store = {
+    get: k => { try { return localStorage.getItem(k) || ""; } catch (_) { return ""; } },
+    set: (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (_) {} },
+  };
+
+  // The QR link carries #t=<code>&k=<key>. Keep both on the phone, then drop them from the
+  // address bar so they never reach history, bookmarks or a screenshot.
+  const hash = new URLSearchParams(location.hash.slice(1));
+  if (hash.get("t")) {
+    store.set("edgeToken", hash.get("t"));
+    store.set("edgeKey", hash.get("k") || "");
+    history.replaceState(null, "", location.pathname);
+  }
+  let token = store.get("edgeToken");
+  let roundKeys = store.get("edgeKey") ? Gcm.keyFromText(store.get("edgeKey")) : null;
+  const status = $("#status");
+  let retryTimer = null;
+
+  function setStatus(text, on) {
+    status.className = "status" + (on ? " on" : "");
+    status.innerHTML = (on && roundKeys ? '<svg class="i"><use href="#i-lock"/></svg>' : "") + text;
+  }
+
+  // Every request carries the pairing code; with the key, bodies are sealed (bound to their path
+  // and time so they can't be replayed) and replies come back sealed too.
+  async function api(path, body) {
+    const headers = { "X-Edge-Token": token };
+    if (roundKeys) headers["X-Edge-Enc"] = "1";
+    let payload;
+    if (body !== undefined) {
+      headers["Content-Type"] = "application/json";
+      payload = JSON.stringify(roundKeys ? { e: Gcm.seal(roundKeys, JSON.stringify({ ...body, path, ts: Date.now() })) } : body);
+    }
+    const r = await fetch(path, { method: body === undefined ? "GET" : "POST", headers, body: payload, cache: "no-store" });
+    if (r.status === 401) { showPair("That code didn't match. Scan the QR code on the TV again."); throw new Error("unpaired"); }
+    if (r.status === 429) {
+      const wait = Math.min(120, Number(r.headers.get("Retry-After")) || 60);
+      showPair(`Too many wrong codes. Try again in ${wait} seconds.`);
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(start, wait * 1000);
+      throw new Error("locked");
+    }
+    const j = await r.json();
+    if (j && typeof j.e === "string") {
+      const plain = roundKeys && Gcm.open(roundKeys, j.e);
+      if (!plain) throw new Error("This phone's key is out of date. Scan the QR code on the TV again.");
+      return JSON.parse(plain);
+    }
+    return j;
+  }
+  const failed = e => ({ error: e && e.message && !/fetch|network|load/i.test(e.message) ? e.message : "Can't reach the TV. Is EdgeStream open on it?" });
+
+  function showPair(msg) {
+    $("#app").hidden = true; $("#nav").hidden = true; $("#fieldBar").hidden = true; $("#pair").hidden = false;
+    $("#pairMsg").textContent = msg || "";
+    setStatus("Not paired", false);
+  }
+
+  function applyTheme(t) {
+    if (!t) return;
+    const root = document.documentElement.style;
+    const map = { bg: "--bg", panel: "--panel", panelHi: "--panel-hi", line: "--line", text: "--text", dim: "--dim", faint: "--faint", accent: "--accent", onAccent: "--on-accent" };
+    for (const [k, v] of Object.entries(map)) if (t[k]) root.setProperty(v, t[k]);
+    document.querySelector('meta[name="theme-color"]').content = t.bg || "#0b0d12";
+  }
+
+  function onState(s) {
+    applyTheme(s.theme);
+    renderField(s.field);
+    if ($("#providers").classList.contains("active")) renderSources(s);
+    setStatus("Connected", true);
+  }
+
+  async function start() {
+    try {
+      const s = await api("/api/state");
+      clearTimeout(retryTimer);
+      $("#pair").hidden = true; $("#app").hidden = false; $("#nav").hidden = false;
+      $("#codeOnly").hidden = !!roundKeys;
+      onState(s);
+      // A TV with no provider is waiting for one: open on that, not the remote.
+      if (!s.sources.length && roundKeys) openTab("providers");
+    } catch (e) {
+      if (e.message !== "unpaired" && e.message !== "locked") setStatus("Can't reach the TV", false);
+    }
+  }
+  $("#pairForm").onsubmit = e => {
+    e.preventDefault();
+    token = $("#pairCode").value.trim();
+    store.set("edgeToken", token); store.set("edgeKey", ""); roundKeys = null;
+    start();
+  };
+
+  // Follow the TV: theme, connection and any text box selected there.
+  setInterval(() => {
+    if (document.hidden || $("#app").hidden) return;
+    api("/api/state").then(onState).catch(() => setStatus("Can't reach the TV", false));
+  }, 1500);
+
+  const buzz = () => navigator.vibrate && navigator.vibrate(8);
+  document.querySelectorAll("[data-key]").forEach(b => b.addEventListener("click", () => { buzz(); api("/api/key", { key: b.dataset.key }).catch(() => {}); }));
+  document.querySelectorAll("[data-open]").forEach(b => b.addEventListener("click", () => { buzz(); api("/api/open", { screen: b.dataset.open }).catch(() => {}); }));
+
+  function note(el, r) {
+    el.className = "note" + (r.error ? " err" : " good");
+    el.textContent = r.error || r.message || "Done";
+  }
+
+  // ---- the TV's selected text box ----
+  let fieldKey = null;
+  function renderField(f) {
+    const bar = $("#fieldBar"), input = $("#fieldInput");
+    bar.hidden = !f || !roundKeys;
+    if (bar.hidden) { fieldKey = null; return; }
+    const key = f.label + "|" + f.secret;
+    if (key === fieldKey) return; // never overwrite what's being typed
+    fieldKey = key;
+    $("#fieldLabel").textContent = "TV is asking for: " + f.label;
+    input.type = f.secret ? "password" : "text";
+    input.value = f.value || "";
+    $("#fieldMsg").className = "note";
+    $("#fieldMsg").textContent = f.secret ? "Hidden on the TV. Type it here." : "";
+  }
+  $("#fieldBar").onsubmit = async e => {
+    e.preventDefault();
+    const r = await api("/api/field", { text: $("#fieldInput").value }).catch(failed);
+    note($("#fieldMsg"), r.error ? r : { message: "Sent to the TV" });
+  };
+
+  // ---- say or type ----
+  // The page's own microphone needs https, which a TV on the home network can't offer. When the
+  // browser refuses, the keyboard opens on the box instead and its microphone key does the speech.
+  async function ask(text) {
+    if (!text.trim()) return;
+    const r = await api("/api/command", { text }).catch(failed);
+    note($("#askMsg"), r);
+    if (!r.error) $("#ask").value = "";
+  }
+  $("#askForm").onsubmit = e => { e.preventDefault(); ask($("#ask").value); };
+  const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+  function dictate() {
+    $("#ask").focus();
+    $("#askMsg").className = "note";
+    $("#askMsg").textContent = "Tap the microphone on your keyboard and speak, then Go.";
+  }
+  $("#micBtn").onclick = () => {
+    buzz();
+    if (!Speech || !window.isSecureContext) return dictate();
+    const rec = new Speech(), mic = $("#micBtn");
+    rec.lang = navigator.language || "en-AU";
+    rec.interimResults = true;
+    mic.classList.add("live");
+    rec.onresult = e => {
+      const text = Array.from(e.results).map(x => x[0].transcript).join("");
+      $("#ask").value = text;
+      if (e.results[e.results.length - 1].isFinal) ask(text);
+    };
+    rec.onerror = () => { mic.classList.remove("live"); dictate(); };
+    rec.onend = () => mic.classList.remove("live");
+    rec.start();
+  };
+
+  // ---- tabs ----
+  function openTab(name) {
+    document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x.dataset.tab === name));
+    document.querySelectorAll("main section").forEach(s => s.classList.toggle("active", s.id === name));
+    if (name === "channels") loadChannels();
+    if (name === "providers") api("/api/state").then(renderSources).catch(() => {});
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll("nav button").forEach(b => b.onclick = () => openTab(b.dataset.tab));
+
+  // ---- channels ----
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  let chTimer;
+  $("#chSearch").oninput = () => { clearTimeout(chTimer); chTimer = setTimeout(loadChannels, 250); };
+  async function loadChannels() {
+    const box = $("#chList");
+    if (!roundKeys) { box.innerHTML = '<p class="empty">Scan the QR code on the TV to browse channels.</p>'; return; }
+    const list = await api("/api/channels", { q: $("#chSearch").value.trim() }).catch(failed);
+    if (list.error) { box.innerHTML = `<p class="empty">${esc(list.error)}</p>`; return; }
+    box.innerHTML = list.length ? list.map(c => `
+      <button class="ch" data-play="${esc(c.key)}">
+        <span class="n">${esc(c.number)}</span>
+        ${c.logo ? `<img src="${esc(c.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'ph'}))">` : '<span class="ph"></span>'}
+        <span class="t"><b>${esc(c.name)}</b><span>${esc(c.now || c.group)}</span></span>
+        <svg class="i"><use href="#i-chev"/></svg>
+      </button>`).join("") : '<p class="empty">No channels found.</p>';
+    box.querySelectorAll("[data-play]").forEach(b => b.onclick = () => { buzz(); api("/api/play", { key: b.dataset.play }).catch(() => {}); });
+  }
+
+  // ---- providers ----
+  let srcType = "xtream";
+  document.querySelectorAll("#typeSeg button").forEach(b => b.onclick = () => {
+    srcType = b.dataset.type;
+    document.querySelectorAll("#typeSeg button").forEach(x => x.classList.toggle("on", x === b));
+    $("#creds").hidden = srcType === "m3u";
+    $("#urlLabel").textContent = srcType === "m3u" ? "Playlist address" : "Server address";
+    $("#srcUrl").placeholder = srcType === "m3u" ? "http://…/playlist.m3u" : "http://example.com:8080";
+  });
+  $("#srcForm").onsubmit = async e => {
+    e.preventDefault();
+    const btn = $("#srcBtn"), msg = $("#srcMsg");
+    btn.disabled = true; btn.textContent = "Checking login…";
+    msg.className = "note"; msg.textContent = "";
+    const f = Object.fromEntries(new FormData(e.target));
+    const r = await api("/api/source", { type: srcType, ...f }).catch(failed);
+    btn.disabled = false; btn.textContent = "Check login & add to TV";
+    note(msg, r);
+    if (!r.error) { e.target.password.value = ""; setTimeout(() => api("/api/state").then(renderSources).catch(() => {}), 4000); }
+  };
+  function renderSources(s) {
+    $("#sources").innerHTML = s.sources.length
+      ? s.sources.map(x => `<div class="source"><b>${esc(x.name)}</b><div>${x.type === "XTREAM" ? "Xtream Codes" : "M3U playlist"} · ${Number(x.channels).toLocaleString()} channels${x.error ? ` · <span class="bad">${esc(x.error)}</span>` : ""}</div></div>`).join("")
+      : '<p class="note">No providers yet.</p>';
+  }
+
+  if (!token) showPair(); else start();
+})();
+</script>
+</body>
+</html>

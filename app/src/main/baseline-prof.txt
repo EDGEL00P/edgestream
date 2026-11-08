@@ -1,0 +1,11 @@
+# EdgeStream startup + navigation profile (hand-written: compile the app's own UI, shell, glass,
+# input and data code ahead of time; Compose/Coil ship their own profiles via profileinstaller).
+HSPLcom/edgestream/tv/ui/**->**(**)**
+HSPLcom/edgestream/tv/ui/shell/**->**(**)**
+HSPLcom/edgestream/tv/ui/glass/**->**(**)**
+HSPLcom/edgestream/tv/ui/input/**->**(**)**
+HSPLcom/edgestream/tv/ui/components/**->**(**)**
+HSPLcom/edgestream/tv/data/**->**(**)**
+HSPLcom/edgestream/tv/MainActivity;->**(**)**
+HSPLcom/edgestream/tv/EdgeStreamApp;->**(**)**
+Lcom/edgestream/tv/**;
