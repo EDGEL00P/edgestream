@@ -146,4 +146,20 @@ object Links {
     fun live(channelKey: String): Uri = Uri.Builder().scheme(SCHEME).authority("live").appendPath(channelKey).build()
     fun resume(progressKey: String): Uri = Uri.Builder().scheme(SCHEME).authority("resume").appendPath(progressKey).build()
     fun open(screen: String): Uri = Uri.Builder().scheme(SCHEME).authority("open").appendPath(screen).build()
+
+    /** A parsed voice/typed command as an app link; a guessed search is flagged so the app may ask the AI. */
+    fun forCommand(cmd: com.edgestream.tv.remote.VoiceCommand?, raw: String): Uri {
+        val c = Uri.Builder().scheme(SCHEME).authority("command")
+        return when (cmd) {
+            is com.edgestream.tv.remote.VoiceCommand.Tune -> c.appendQueryParameter("action", "tune").appendQueryParameter("n", cmd.number.toString()).build()
+            is com.edgestream.tv.remote.VoiceCommand.Watch -> c.appendQueryParameter("action", "watch").appendQueryParameter("name", cmd.channel).build()
+            is com.edgestream.tv.remote.VoiceCommand.Open -> c.appendQueryParameter("action", "open").appendQueryParameter("screen", cmd.screen.name).build()
+            is com.edgestream.tv.remote.VoiceCommand.Games -> c.appendQueryParameter("action", "games").build()
+            is com.edgestream.tv.remote.VoiceCommand.Team -> c.appendQueryParameter("action", "team").appendQueryParameter("name", cmd.team).build()
+            is com.edgestream.tv.remote.VoiceCommand.WhatsOn -> c.appendQueryParameter("action", "whatson").appendQueryParameter("channel", cmd.channel.orEmpty()).build()
+            is com.edgestream.tv.remote.VoiceCommand.Search -> Uri.Builder().scheme(SCHEME).authority("search")
+                .appendQueryParameter("q", cmd.query).apply { if (cmd.guessed) appendQueryParameter("guessed", "1") }.build()
+            null -> Uri.Builder().scheme(SCHEME).authority("search").appendQueryParameter("q", raw).build()
+        }
+    }
 }

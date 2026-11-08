@@ -46,7 +46,7 @@ class VoiceCommandTest {
 
     @Test fun everythingElseSearches() {
         assertEquals(Search("Brisbane Broncos"), VoiceCommand.parse("search for Brisbane Broncos"))
-        assertEquals(Search("The Bear"), VoiceCommand.parse("The Bear"))
+        assertEquals(Search("The Bear", guessed = true), VoiceCommand.parse("The Bear"))
         assertNull(VoiceCommand.parse("  "))
     }
 }

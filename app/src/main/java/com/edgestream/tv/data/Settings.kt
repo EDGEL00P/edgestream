@@ -36,6 +36,8 @@ data class AppSettings(
     val englishOnly: Boolean = true,
     /** Free personal key from themoviedb.org; enables film/series backdrops, cast and ratings. */
     val tmdbApiKey: String = "",
+    /** Google Gemini (free tier): understands commands the built-in rules can't. */
+    val geminiApiKey: String = "",
     /** The viewer's own Trakt app (trakt.tv/oauth/applications) and Simkl app (simkl.com/settings/developer). */
     val traktClientId: String = "",
     val traktClientSecret: String = "",
@@ -123,6 +125,7 @@ class Settings(context: Context) {
         hiddenGroups = prefs.getStringSet("hiddenGroups", null)?.toSet().orEmpty(),
         englishOnly = prefs.getBoolean("englishOnly", true),
         tmdbApiKey = Secrets.openOrBlank(prefs.getString("tmdbKey", "") ?: ""),
+        geminiApiKey = Secrets.openOrBlank(prefs.getString("geminiKey", "") ?: ""),
         traktClientId = Secrets.openOrBlank(prefs.getString("traktId", "") ?: ""),
         traktClientSecret = Secrets.openOrBlank(prefs.getString("traktSecret", "") ?: ""),
         simklClientId = Secrets.openOrBlank(prefs.getString("simklId", "") ?: ""),
@@ -178,6 +181,7 @@ class Settings(context: Context) {
             .putStringSet("hiddenGroups", s.hiddenGroups)
             .putBoolean("englishOnly", s.englishOnly)
             .putString("tmdbKey", Secrets.seal(s.tmdbApiKey))
+            .putString("geminiKey", Secrets.seal(s.geminiApiKey))
             .putString("traktId", Secrets.seal(s.traktClientId))
             .putString("traktSecret", Secrets.seal(s.traktClientSecret))
             .putString("simklId", Secrets.seal(s.simklClientId))

@@ -167,7 +167,13 @@ class CompanionServer(private val context: Context, private val repo: Repository
             }
             "POST /api/command" -> {
                 if (!sealed) return error(403, RESCAN)
-                val cmd = VoiceCommand.parse(body.optString("text").take(200)) ?: return error(400, "Say or type something first")
+                val text = body.optString("text").take(200)
+                val parsed = VoiceCommand.parse(text) ?: return error(400, "Say or type something first")
+                // Rules first; only their give-up search asks Gemini (when a key is set).
+                val cmd = if (parsed is VoiceCommand.Search && parsed.guessed) {
+                    val key = com.edgestream.tv.EdgeStreamApp.instance.settings.value.geminiApiKey
+                    kotlinx.coroutines.runBlocking { com.edgestream.tv.data.AiAssist.interpret(text, key) } ?: parsed
+                } else parsed
                 // A question is answered in words, here and on the TV; everything else is carried out.
                 if (cmd.isQuestion) {
                     val answer = PhoneLink.answerer?.let { ask ->

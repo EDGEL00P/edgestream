@@ -447,6 +447,14 @@ private fun SettingsPageContent(vm: AppViewModel, page: SettingsPage) {
                         onSave = { key -> set { it.copy(tmdbApiKey = key) } },
                     )
                 }
+                item {
+                    SecureApiKeyField(
+                        title = "Gemini",
+                        description = "Understands voice and typed commands the built-in rules can't, like \"put the Chiefs game on\". Free key at aistudio.google.com. Only the command is sent.",
+                        savedValue = s.geminiApiKey,
+                        onSave = { key -> set { it.copy(geminiApiKey = key) } },
+                    )
+                }
                 item { PanelSection("Watch Tracking") }
                 item {
                     SecureApiKeyField(

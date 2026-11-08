@@ -12,7 +12,8 @@ sealed interface VoiceCommand {
     data class Tune(val number: Int) : VoiceCommand
     data class Watch(val channel: String) : VoiceCommand
     data class Open(val screen: Screen) : VoiceCommand
-    data class Search(val query: String) : VoiceCommand
+    /** [guessed]: nothing else matched, so this is the fallback rather than an asked-for search. */
+    data class Search(val query: String, val guessed: Boolean = false) : VoiceCommand
     /** "What's on Fox League?" — null channel means what's on in general (the Guide). */
     data class WhatsOn(val channel: String?) : VoiceCommand
     /** "Today's games", "scores". */
@@ -79,7 +80,7 @@ sealed interface VoiceCommand {
                 return Watch(original.takeLast(target.length).trim())
             }
             val search = Regex("""^(?:search for|search|find|look for|look up)\s+(.+)$""").matchEntire(t)
-            return Search(search?.let { original.takeLast(it.groupValues[1].length).trim() } ?: original)
+            return Search(search?.let { original.takeLast(it.groupValues[1].length).trim() } ?: original, guessed = search == null)
         }
     }
 }

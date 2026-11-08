@@ -1701,8 +1701,15 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
             }
             // Global/voice search forwards its query here.
             "search" -> {
+                val q = uri.getQueryParameter("q").orEmpty()
+                if (uri.getQueryParameter("guessed") == "1") {
+                    com.edgestream.tv.data.AiAssist.interpret(q, settings.value.geminiApiKey)?.let { understood ->
+                        openLink(com.edgestream.tv.launcher.Links.forCommand(understood, q))
+                        return
+                    }
+                }
                 if (fullscreen.value) exitFullscreen()
-                uri.getQueryParameter("q")?.let { searchQuery.value = it }
+                if (q.isNotEmpty()) searchQuery.value = q
                 screen.value = Screen.SEARCH
             }
             // Parsed voice commands from the Shield remote mic / global search.
