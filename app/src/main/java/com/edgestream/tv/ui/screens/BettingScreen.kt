@@ -48,6 +48,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.edgestream.tv.data.NflModel
 import com.edgestream.tv.data.NflPicks
+import com.edgestream.tv.data.NflProps
 import com.edgestream.tv.data.Racing
 import com.edgestream.tv.data.Sports
 import com.edgestream.tv.data.db.ChannelEntity
@@ -95,6 +96,7 @@ fun BettingScreen(vm: AppViewModel) {
     val nflPicks = nfl?.picks.orEmpty()
     val nflValue = if (marketMode == "all" || marketMode == "nfl") nflPicks.filter { it.values.isNotEmpty() } else emptyList()
     val nflAll = if (marketMode == "nfl") nflPicks else emptyList()
+    val nflProps = if (marketMode == "nfl") nfl?.props.orEmpty().take(20) else emptyList()
     val nflLocks = if (marketMode == "nfl") nflPicks.filter { it.tier != null }.sortedByDescending { it.winProb } else emptyList()
     val nflFirst = live.isEmpty() && upcoming.isEmpty() && sortedRaces.isEmpty()
 
@@ -177,6 +179,14 @@ fun BettingScreen(vm: AppViewModel) {
                 NflPickRow(p, settings.use24h, if (i == 0 && nflFirst && nflValue.isEmpty() && nflLocks.isEmpty()) firstRow else null, "betting:row|nfl:${p.game.id}") { gameSheet = p.game }
             }
         }
+        if (nflProps.isNotEmpty()) {
+            item { BetSection("NFL PROPS · LEANS", "projection vs line · unvalidated, graded live") }
+            itemsIndexed(nflProps, key = { _, l -> "nfl-prop:${l.espnGame}:${l.player.gsis}:${l.market}" }) { _, l ->
+                PropRow(l, "betting:row|prop:${l.espnGame}:${l.player.gsis}:${l.market}") {
+                    nflPicks.firstOrNull { it.espnId == l.espnGame }?.let { gameSheet = it.game }
+                }
+            }
+        }
         if (marketMode == "nfl") {
             val board = nfl
             item {
@@ -205,6 +215,7 @@ fun BettingScreen(vm: AppViewModel) {
             channel = lookup.find(g),
             use24h = settings.use24h,
             pick = nflPicks.firstOrNull { it.game.id == g.id },
+            props = nfl?.props.orEmpty().filter { "nfl:${it.espnGame}" == g.id }.take(6),
             onWatch = { ch -> vm.playChannel(ch, vm.zapListFor(ch)); gameSheet = null },
             onClose = { gameSheet = null },
         )
@@ -359,6 +370,7 @@ private fun BetGameSheet(
     channel: ChannelEntity?,
     use24h: Boolean,
     pick: NflPicks.Pick?,
+    props: List<NflProps.Lean>,
     onWatch: (ChannelEntity) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -401,6 +413,7 @@ private fun BetGameSheet(
                     OddsRow(v.rule.label, v.selection + (v.windMph?.let { "  ·  wind $it mph" } ?: "") + if (v.modelAgrees) "  ·  model agrees" else "")
                 }
             }
+            props.forEach { l -> OddsRow("Prop · ${pct(l.confidence)}", l.selection) }
             Text(
                 channel?.let { "On ${it.name}" } ?: "Check provider lineup",
                 style = MaterialTheme.typography.labelMedium, color = if (channel != null) Edge.Accent else Edge.Faint,
@@ -532,6 +545,38 @@ private fun NflPickRow(pick: NflPicks.Pick, use24h: Boolean, focusRequester: Foc
 }
 
 @Composable
+private fun PropRow(lean: NflProps.Lean, memoryKey: String, onClick: () -> Unit) {
+    FocusSurface(
+        onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = EdgeShapes.Card,
+        focusScale = 1.01f, glow = false, memoryKey = memoryKey,
+    ) { focused ->
+        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "${lean.player.name}  ·  ${lean.player.position}", style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    BetMini("MARKET", lean.market.label, Modifier.weight(1f))
+                    BetMini(
+                        "LINE",
+                        NflPicks.trim(lean.line) + (lean.open?.takeIf { it != lean.line }?.let { "  (open ${NflPicks.trim(it)})" } ?: ""),
+                        Modifier.weight(1.2f),
+                    )
+                    BetMini("PROJECTION", String.format(Locale.US, "%.1f", lean.projection.mean), Modifier.weight(1f))
+                    BetMini("LEAN", "${if (lean.over) "Over" else "Under"} ${pct(lean.confidence)}", Modifier.weight(1f))
+                }
+                Text(
+                    "${lean.projection.games} games · recency-weighted", style = MaterialTheme.typography.labelSmall,
+                    color = if (focused) Edge.Dim else Edge.Faint, modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+            Pill("PROP", color = Edge.Accent2)
+        }
+    }
+}
+
+@Composable
 private fun NflTrackRecord(board: NflPicks.Board) {
     val lines = buildList {
         board.backtest?.let { b ->
@@ -561,7 +606,15 @@ private fun NflTrackRecord(board: NflPicks.Board) {
                     " · ${log.open} open",
             )
         }
-        add("Data: nflverse schedules (CC-BY 4.0), ESPN lines, Open-Meteo wind.")
+        board.propLog?.let { p ->
+            add(
+                "Props (projection vs line, no free line history to backtest, so graded live): " +
+                    "${p.record.wins}-${p.record.losses}-${p.record.pushes}" +
+                    (p.avgMove?.let { " · lines moved ${if (it >= 0) "+" else ""}${String.format(Locale.US, "%.1f", it)} toward the picks" } ?: "") +
+                    " · ${p.open} open. Prices aren't published; break-even at -110 is 52.4%.",
+            )
+        }
+        add("Data: nflverse schedules + player stats (CC-BY 4.0), ESPN lines and props, Open-Meteo wind.")
     }
     Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         lines.forEach { Text(it, style = MaterialTheme.typography.labelMedium, color = Edge.Dim) }

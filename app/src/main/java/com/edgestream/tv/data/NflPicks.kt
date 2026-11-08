@@ -32,6 +32,8 @@ object NflPicks {
         val rules: List<NflModel.RuleRecord>,
         val tiers: List<NflModel.TierRecord>,
         val backtest: NflModel.Backtest?,
+        /** Player projections for props; null when the nflverse player files can't be loaded. */
+        val book: NflProps.Book? = null,
     ) {
         val byEspn: Map<String, NflModel.Prediction> = predictions.mapNotNull { p -> p.row.espnId?.let { it to p } }.toMap()
     }
@@ -59,11 +61,13 @@ object NflPicks {
         val tiers: List<NflModel.TierRecord>,
         val backtest: NflModel.Backtest?,
         val log: LogSummary,
+        val props: List<NflProps.Lean> = emptyList(),
+        val propLog: NflProps.LogSummary? = null,
     )
 
-    fun build(rows: List<NflModel.Row>): Model {
+    fun build(rows: List<NflModel.Row>, book: NflProps.Book? = null): Model {
         val predictions = NflModel.replay(rows)
-        return Model(rows, predictions, NflModel.ruleRecords(rows), NflModel.tierRecords(predictions), NflModel.backtest(predictions))
+        return Model(rows, predictions, NflModel.ruleRecords(rows), NflModel.tierRecords(predictions), NflModel.backtest(predictions), book)
     }
 
     /** games.csv from the cache, re-downloaded when older than 6 h; the cache covers a failed download. */
@@ -82,7 +86,9 @@ object NflPicks {
                 ?.also { writeAtomic(cache, it) }
                 ?: cache.takeIf(File::isFile)?.readText()
         } ?: return@withContext null
-        withContext(Dispatchers.Default) { NflModel.parse(text).takeIf { it.isNotEmpty() }?.let(::build) }
+        val rows = withContext(Dispatchers.Default) { NflModel.parse(text) }.takeIf { it.isNotEmpty() } ?: return@withContext null
+        val book = NflProps.loadBook(dir, rows.maxOf { it.season }, now)
+        withContext(Dispatchers.Default) { build(rows, book) }
     }
 
     /**
@@ -157,7 +163,29 @@ object NflPicks {
         val picks = picks(model, games, wind)
         val log = PickLog(File(dir, LOG_FILE))
         withContext(Dispatchers.IO) { log.lock(picks, now) }
-        return Board(picks, model.rules, model.tiers, model.backtest, log.summary(model.rows))
+        val book = model.book
+        val propLines = HashMap<String, List<NflProps.PropLine>>()
+        val leans = ArrayList<NflProps.Lean>()
+        if (book != null) {
+            for (g in games) {
+                if (g.league.id != "nfl" || g.state != Sports.State.UPCOMING || g.startMs - now > WIND_HORIZON_MS) continue
+                val id = g.id.substringAfter(':')
+                val row = model.byEspn[id]?.row ?: continue
+                val lines = NflProps.linesFor(id, now)
+                propLines[id] = lines
+                leans += NflProps.leans(book, id, row.gameId, lines)
+            }
+        }
+        val propLog = NflProps.log(dir)
+        val played = model.rows.filter { it.played }.mapTo(HashSet()) { it.gameId }
+        val propSummary = withContext(Dispatchers.IO) {
+            propLog.update(leans, propLines, now)
+            propLog.summary(book, played)
+        }
+        return Board(
+            picks, model.rules, model.tiers, model.backtest, log.summary(model.rows),
+            props = leans.sortedByDescending { it.confidence }, propLog = propSummary.takeIf { book != null },
+        )
     }
 
     // ---- game-time wind (Open-Meteo, keyless) -------------------------------------------------
@@ -256,7 +284,7 @@ object NflPicks {
         return LogSummary(record, if (clvN == 0) null else clvSum / clvN, open)
     }
 
-    private fun writeAtomic(target: File, text: String) {
+    internal fun writeAtomic(target: File, text: String) {
         val temp = File(target.parentFile, "${target.name}.tmp")
         temp.writeText(text)
         if (!temp.renameTo(target)) {
