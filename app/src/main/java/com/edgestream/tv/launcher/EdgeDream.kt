@@ -126,8 +126,15 @@ private fun DreamScreen() {
 
     var weather by remember { mutableStateOf<PublicApis.Weather?>(null) }
     LaunchedEffect(Unit) {
-        weather = runCatching { PublicApis.location() }
-            .getOrNull()?.let { loc -> runCatching { PublicApis.weather(loc) }.getOrNull() }
+        // Same place as Home: the one picked in Settings, else the typed city, else the IP guess.
+        // Network calls run off the main thread (they threw there and the line never showed).
+        weather = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val s = com.edgestream.tv.EdgeStreamApp.instance.settings.value
+            val loc = s.weatherPlace?.toLocation()
+                ?: s.weatherCity.trim().takeIf { it.isNotEmpty() }?.let { runCatching { PublicApis.geocode(it) }.getOrNull() }
+                ?: runCatching { PublicApis.location() }.getOrNull()
+            loc?.let { runCatching { PublicApis.weather(it) }.getOrNull() }
+        }
     }
 
     var reels by remember { mutableStateOf<List<SportsReels.Reel>>(emptyList()) }
