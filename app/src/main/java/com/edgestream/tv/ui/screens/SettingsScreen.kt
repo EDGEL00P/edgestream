@@ -136,14 +136,22 @@ private sealed interface PanelPlace {
 fun SettingsScreen(vm: AppViewModel) {
     var place by remember { mutableStateOf<PanelPlace>(PanelPlace.Root) }
     var lastRow by rememberSaveable { mutableStateOf<String?>(null) }
+    var focusedRow by remember { mutableStateOf<StageItem?>(null) }
     androidx.activity.compose.BackHandler(enabled = place != PanelPlace.Root) { place = PanelPlace.Root }
+    // Inside a page the stage shows that page; on the list it follows focus.
+    val stage = when (val p = place) {
+        PanelPlace.Root -> focusedRow
+        is PanelPlace.Edge -> StageItem(p.page.icon, p.page.title, p.page.hint)
+        is PanelPlace.Device -> StageItem(p.page.icon, p.page.title, p.page.hint)
+    }
     Box(Modifier.fillMaxSize()) {
+        stage?.let { SettingsStage(it, Modifier.align(Alignment.CenterStart).padding(start = 40.dp, end = PANEL_WIDTH + 40.dp)) }
         Column(
             Modifier.align(Alignment.CenterEnd).width(PANEL_WIDTH).fillMaxHeight()
                 .background(Edge.Bg.copy(alpha = 0.97f)).padding(horizontal = 24.dp, vertical = 28.dp),
         ) {
             when (val p = place) {
-                PanelPlace.Root -> PanelRoot(lastRow) { key, next -> lastRow = key; place = next }
+                PanelPlace.Root -> PanelRoot(lastRow, onFocusRow = { focusedRow = it }) { key, next -> lastRow = key; place = next }
                 is PanelPlace.Edge -> SettingsPageContent(vm, p.page)
                 is PanelPlace.Device -> DevicePageContent(p.page) { SystemScreen(vm, embedded = true) }
             }
@@ -153,8 +161,20 @@ fun SettingsScreen(vm: AppViewModel) {
 
 private val PANEL_WIDTH = 460.dp
 
+private data class StageItem(val icon: androidx.compose.ui.graphics.vector.ImageVector, val title: String, val hint: String)
+
+/** The left of Settings: the focused section, large, straight on the picture. */
 @Composable
-private fun PanelRoot(restore: String?, onOpen: (String, PanelPlace) -> Unit) {
+private fun SettingsStage(item: StageItem, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Icon(item.icon, null, Modifier.size(84.dp), tint = Edge.Accent)
+        Text(item.title, style = MaterialTheme.typography.displaySmall, color = Edge.Text, maxLines = 2)
+        Text(item.hint, style = MaterialTheme.typography.titleMedium, color = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA), maxLines = 2)
+    }
+}
+
+@Composable
+private fun PanelRoot(restore: String?, onFocusRow: (StageItem) -> Unit, onOpen: (String, PanelPlace) -> Unit) {
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { repeat(20) { delay(50); runCatching { first.requestFocus() } } }
     val edgePages = SettingsPage.entries.filter { it != SettingsPage.SYSTEM }
@@ -164,12 +184,12 @@ private fun PanelRoot(restore: String?, onOpen: (String, PanelPlace) -> Unit) {
         item { PanelSection("EdgeStream") }
         items(edgePages, key = { "edge:${it.name}" }) { p ->
             val key = "edge:${p.name}"
-            PanelRow(p.icon, p.title, p.hint, if (key == firstKey) first else null) { onOpen(key, PanelPlace.Edge(p)) }
+            PanelRow(p.icon, p.title, p.hint, if (key == firstKey) first else null, onFocus = { onFocusRow(StageItem(p.icon, p.title, p.hint)) }) { onOpen(key, PanelPlace.Edge(p)) }
         }
         item { PanelSection("Device") }
         items(DevicePage.entries, key = { "device:${it.name}" }) { p ->
             val key = "device:${p.name}"
-            PanelRow(p.icon, p.title, p.hint, if (key == firstKey) first else null) { onOpen(key, PanelPlace.Device(p)) }
+            PanelRow(p.icon, p.title, p.hint, if (key == firstKey) first else null, onFocus = { onFocusRow(StageItem(p.icon, p.title, p.hint)) }) { onOpen(key, PanelPlace.Device(p)) }
         }
         item {
             Text("EdgeStream ${BuildConfigInfo.VERSION}", color = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA), fontSize = 13.sp, modifier = Modifier.padding(start = 12.dp, top = 18.dp))
@@ -183,10 +203,18 @@ private fun PanelSection(title: String) =
 
 /** One Android-TV-style row: icon, title, grey summary; the focused row gets a soft lighter fill. */
 @Composable
-private fun PanelRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, summary: String?, requester: FocusRequester?, onClick: () -> Unit) {
+private fun PanelRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    summary: String?,
+    requester: FocusRequester?,
+    onFocus: () -> Unit = {},
+    onClick: () -> Unit,
+) {
     FocusSurface(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(if (summary != null) 64.dp else 52.dp).then(if (requester != null) Modifier.focusRequester(requester) else Modifier),
+        modifier = Modifier.fillMaxWidth().height(if (summary != null) 64.dp else 52.dp).then(if (requester != null) Modifier.focusRequester(requester) else Modifier)
+            .onFocusChanged { if (it.isFocused) onFocus() },
         shape = RoundedCornerShape(6.dp), color = Color.Transparent, focusedColor = Edge.Text.copy(alpha = 0.14f),
         focusScale = 1f, glow = false,
     ) {

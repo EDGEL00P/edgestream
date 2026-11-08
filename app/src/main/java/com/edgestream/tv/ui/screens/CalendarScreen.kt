@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
@@ -85,6 +86,10 @@ fun formatTime(t: LocalTime, use24h: Boolean): String =
 fun CalendarScreen(vm: AppViewModel) {
     val events by vm.calendarEvents.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val weather by vm.weatherDetail.collectAsStateWithLifecycle()
+    val games by vm.sportsGames.collectAsStateWithLifecycle()
+    val nfl by vm.nflBoard.collectAsStateWithLifecycle()
+    val lookup by vm.sportsLookup.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
     var month by remember { mutableStateOf(YearMonth.from(today)) }
     var selected by remember { mutableStateOf(today) }
@@ -97,7 +102,7 @@ fun CalendarScreen(vm: AppViewModel) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     month.month.getDisplayName(TextStyle.FULL, Locale.getDefault()) + " " + month.year,
-                    style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, color = Edge.Text, modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.headlineSmall, color = Edge.Text, modifier = Modifier.weight(1f),
                 )
                 EdgeButton("", { month = month.minusMonths(1) }, icon = Icons.Rounded.ChevronLeft)
                 Spacer(Modifier.width(8.dp))
@@ -108,8 +113,23 @@ fun CalendarScreen(vm: AppViewModel) {
             MonthGrid(month, today, selected, events, todayCell, onSelect = { selected = it }, onOpen = { selected = it; editing = newEvent(it) })
         }
         Spacer(Modifier.width(40.dp))
+        val zone = java.time.ZoneId.systemDefault()
+        val dayGames = remember(games, selected) {
+            // Live first, then still to come, then finished.
+            games.filter { java.time.Instant.ofEpochMilli(it.startMs).atZone(zone).toLocalDate() == selected }
+                .sortedWith(compareBy({ if (it.state == com.edgestream.tv.data.Sports.State.LIVE) -1 else if (it.state == com.edgestream.tv.data.Sports.State.FINAL) 1 else 0 }, { it.startMs }))
+        }
         DayAgenda(
             selected, eventsOn(events, selected), settings.use24h,
+            forecast = weather?.daily?.firstOrNull { it.date == selected.toString() },
+            games = dayGames,
+            pickFor = { g -> nfl?.picks?.firstOrNull { it.game.id == g.id } },
+            onGame = { g ->
+                val pick = nfl?.picks?.firstOrNull { it.game.id == g.id }
+                if (pick != null) vm.openNflPick(pick.espnId)
+                else lookup.find(g)?.let { ch -> vm.playChannel(ch, vm.zapListFor(ch)) }
+                    ?: vm.showNotice("No channel in your lineup is carrying ${g.away.abbr} v ${g.home.abbr}")
+            },
             onAdd = { editing = newEvent(selected) },
             onOpen = { e ->
                 when (e.kind) {
@@ -192,19 +212,31 @@ private fun MonthGrid(
 @Composable
 private fun DayAgenda(
     day: LocalDate, entries: List<CalendarEvent>, use24h: Boolean,
+    forecast: com.edgestream.tv.data.PublicApis.DayPoint?,
+    games: List<com.edgestream.tv.data.Sports.Game>,
+    pickFor: (com.edgestream.tv.data.Sports.Game) -> com.edgestream.tv.data.NflPicks.Pick?,
+    onGame: (com.edgestream.tv.data.Sports.Game) -> Unit,
     onAdd: () -> Unit, onOpen: (CalendarEvent) -> Unit, modifier: Modifier,
 ) {
+    // The day's whole story: the date, its weather, your plans, then the sport on that day.
     Column(modifier) {
         Text(
             day.format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault())),
-            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.headlineSmall, maxLines = 1,
         )
-        EdgeButton("Add Event", onAdd, Modifier.padding(top = 14.dp), primary = true, icon = Icons.Rounded.Add)
-        if (entries.isEmpty()) {
-            Text("Nothing on this day.", style = MaterialTheme.typography.bodyLarge, color = Dim, modifier = Modifier.padding(top = 18.dp))
-        } else {
-            LazyColumn(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(entries, key = { it.id }) { e ->
+        forecast?.let { f ->
+            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                com.edgestream.tv.ui.components.WeatherGlyph(f.code, glyphSize = 22.dp)
+                Spacer(Modifier.width(10.dp))
+                Text("${f.highC.toInt()}° / ${f.lowC.toInt()}°", style = MaterialTheme.typography.titleMedium, color = Edge.Text)
+            }
+        }
+        EdgeButton("Add Event", onAdd, Modifier.padding(top = 12.dp), primary = true, icon = Icons.Rounded.Add)
+        LazyColumn(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (entries.isEmpty()) item {
+                Text("No plans on this day.", style = MaterialTheme.typography.bodyLarge, color = Dim)
+            }
+            items(entries, key = { it.id }) { e ->
                     FocusSurface(
                         onClick = { onOpen(e) }, modifier = Modifier.fillMaxWidth().height(64.dp),
                         shape = RoundedCornerShape(12.dp), color = Edge.Text.copy(alpha = 0.06f), focusedColor = Edge.Text,
@@ -228,6 +260,46 @@ private fun DayAgenda(
                                 EntryKind.USER -> Unit
                             }
                             if (e.alarmMinutesBefore != null) Icon(Icons.Rounded.Alarm, "Alarm", Modifier.size(20.dp), tint = ink)
+                        }
+                    }
+                }
+            if (games.isNotEmpty()) {
+                item {
+                    Text(
+                        "SPORT ON THIS DAY  ·  ${games.size}", style = MaterialTheme.typography.labelSmall, color = Edge.Faint,
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
+                }
+                items(games, key = { "game:" + it.id }) { g ->
+                    val pick = pickFor(g)
+                    FocusSurface(
+                        onClick = { onGame(g) }, modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(12.dp), color = Edge.Text.copy(alpha = 0.04f), focusScale = 1.02f, glow = false,
+                    ) {
+                        Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                when (g.state) {
+                                    com.edgestream.tv.data.Sports.State.LIVE -> "LIVE"
+                                    com.edgestream.tv.data.Sports.State.FINAL -> "Final"
+                                    else -> com.edgestream.tv.ui.Format.time(g.startMs, use24h)
+                                },
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (g.state == com.edgestream.tv.data.Sports.State.LIVE) Edge.Live else Edge.Dim,
+                                modifier = Modifier.width(76.dp),
+                            )
+                            com.edgestream.tv.ui.components.TeamLogo(g.away.logo, g.away.name, size = 24.dp)
+                            Text(" @ ", style = MaterialTheme.typography.labelMedium, color = Edge.Faint)
+                            com.edgestream.tv.ui.components.TeamLogo(g.home.logo, g.home.name, size = 24.dp)
+                            Text(
+                                if (g.state == com.edgestream.tv.data.Sports.State.UPCOMING) "  ${g.away.abbr} @ ${g.home.abbr}"
+                                else "  ${g.away.abbr} ${g.away.score ?: "0"}–${g.home.score ?: "0"} ${g.home.abbr}",
+                                style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                pick?.let { "${it.winner} ${Math.round(it.winProb * 100)}%" } ?: g.league.name,
+                                style = MaterialTheme.typography.labelMedium, color = if (pick != null) Edge.Accent else Edge.Faint, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 10.dp).widthIn(max = 96.dp),
+                            )
                         }
                     }
                 }
