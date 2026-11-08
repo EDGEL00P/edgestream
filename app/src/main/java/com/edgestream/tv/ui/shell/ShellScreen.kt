@@ -167,6 +167,9 @@ fun ShellScreen(
     val rows = allRows.getValue(bandTile)
     var focusedItem by remember { mutableStateOf<BandItem?>(null) }
     val spotlight = if (rest?.inBand == true) focusedItem else rows.firstOrNull()?.items?.firstOrNull()
+    // At rest, the room takes the spotlit game's colours; open sections light it themselves.
+    val roomGame = (spotlight as? BandItem.Game)?.game
+    LaunchedEffect(roomGame?.id, rest != null) { if (rest != null) com.edgestream.tv.ui.components.RoomLight.of(roomGame) }
 
     Box(Modifier.fillMaxSize()) {
         Shade(expand = { expand }, shown = { shown })

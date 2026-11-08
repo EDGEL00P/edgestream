@@ -132,6 +132,7 @@ fun EdgeApp(vm: AppViewModel = viewModel()) {
     val playback by vm.player.state.collectAsStateWithLifecycle()
     val hostView = androidx.compose.ui.platform.LocalView.current
     androidx.compose.runtime.SideEffect { hostView.keepScreenOn = fullscreen && playback.isPlaying }
+    androidx.compose.runtime.SideEffect { com.edgestream.tv.ui.components.FocusBeam.hostRoot = hostView.rootView }
     val weatherAlert by vm.weatherAlert.collectAsStateWithLifecycle()
     val backScope = androidx.compose.runtime.rememberCoroutineScope()
     val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
@@ -360,6 +361,9 @@ fun EdgeApp(vm: AppViewModel = viewModel()) {
                 }
             }
         }
+        // Over the content so section shades can't hide it; screen-blended, so text stays white.
+        if (!fullscreen) com.edgestream.tv.ui.components.RoomLightOverlay(Modifier.fillMaxSize())
+        if (!fullscreen) com.edgestream.tv.ui.components.FocusBeamOverlay(Modifier.fillMaxSize())
         ChannelPadOsd(vm, Modifier.align(Alignment.TopEnd))
         if (!fullscreen) vodDetail?.let { VodDetails(vm, it) }
         if (phoneRemote) PhoneRemoteDialog { phoneRemote = false }

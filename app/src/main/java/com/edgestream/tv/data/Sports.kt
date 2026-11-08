@@ -1296,6 +1296,8 @@ object Sports {
         team.score?.let { put("score", it) }
         put("winner", team.winner)
         team.record?.let { put("record", it) }
+        team.color?.let { put("color", it) }
+        team.altColor?.let { put("altColor", it) }
     }
 
     internal fun decodeGames(raw: String): List<Game> {
@@ -1330,6 +1332,7 @@ object Sports {
             abbr = o.optString("abbr"), name = o.optString("name"),
             logo = o.optString("logo").ifBlank { null }, score = o.optString("score").ifBlank { null },
             winner = o.optBoolean("winner"), record = o.optString("record").ifBlank { null },
+            color = o.optString("color").ifBlank { null }, altColor = o.optString("altColor").ifBlank { null },
         )
     }
 }

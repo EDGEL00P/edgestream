@@ -60,6 +60,8 @@ fun NflHub(board: NflPicks.Board?, use24h: Boolean, onOpen: (Sports.Game) -> Uni
     }
     var selectedId by remember { mutableStateOf(board.picks.first().espnId) }
     val selected = board.picks.firstOrNull { it.espnId == selectedId } ?: board.picks.first()
+    androidx.compose.runtime.LaunchedEffect(selected.espnId) { com.edgestream.tv.ui.components.RoomLight.of(selected.game) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { com.edgestream.tv.ui.components.RoomLight.clear() } }
     Row(modifier.fillMaxSize()) {
         // The slate is the one long list here, so it alone gets the solid strip.
         Box(Modifier.width(330.dp).fillMaxHeight().background(Edge.Solid, EdgeShapes.Card)) { FocusDimGroup {

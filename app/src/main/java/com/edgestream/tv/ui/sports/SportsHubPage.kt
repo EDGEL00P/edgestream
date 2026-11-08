@@ -81,6 +81,8 @@ fun SportsHubPage(vm: AppViewModel) {
     if (chip !in chips) chip = ALL_SPORTS
     val shown = remember(games, chip) { if (chip == RACING) emptyList() else gamesFor(games, chip) }
     var focusedGame by remember { mutableStateOf<Sports.Game?>(null) }
+    LaunchedEffect(focusedGame?.id) { com.edgestream.tv.ui.components.RoomLight.of(focusedGame) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { com.edgestream.tv.ui.components.RoomLight.clear() } }
     val featured = focusedGame?.takeIf { f -> shown.any { it.id == f.id } } ?: featuredGame(shown)
     var openRace by remember { mutableStateOf<Racing.Race?>(null) }
     val gridState = rememberLazyGridState()

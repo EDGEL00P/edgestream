@@ -9,6 +9,9 @@ import com.edgestream.tv.ui.EdgeShapes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -135,6 +138,15 @@ fun FocusSurface(
     // Interface voice: a quiet tick on focus, a confirm thunk on select.
     LaunchedEffect(focused) { if (focused) UiSounds.focus() }
     val fill = if (focused) focusedColor else color
+    // In the main window the shared beam marks focus; dialogs live in their own window and
+    // draw the edge themselves.
+    val beamed = FocusBeam.hostRoot != null && androidx.compose.ui.platform.LocalView.current.rootView === FocusBeam.hostRoot
+    val beamToken = remember { Any() }
+    var coords by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
+    androidx.compose.runtime.DisposableEffect(focused, beamed) {
+        if (focused && beamed) coords?.takeIf { it.isAttached }?.let { FocusBeam.claim(beamToken, it.boundsInRoot()) }
+        onDispose { FocusBeam.release(beamToken) }
+    }
     // Glass gets its sheen and edge light; transparent list rows stay flat until focused.
     val isGlass = fill.alpha > 0.02f
     val dimAlpha = when (tier) {
@@ -169,11 +181,16 @@ fun FocusSurface(
                     clip = true
                 }
             }
+            // After the scale layer, so the beam hugs the card at its focused size.
+            .onGloballyPositioned { c ->
+                coords = c
+                if (focused && beamed) FocusBeam.claim(beamToken, c.boundsInRoot())
+            }
             .clip(shape)
             .background(fill)
-            // Focus reads as an instrument highlight: a thin accent edge and a lit leading bar.
+            // Outside the beam's window (dialogs): a thin accent edge and a lit leading bar.
             .then(
-                if (focused) Modifier.border(1.5.dp, Edge.Accent.copy(alpha = 0.9f), shape).drawWithContent {
+                if (focused && !beamed) Modifier.border(1.5.dp, Edge.Accent.copy(alpha = 0.9f), shape).drawWithContent {
                     drawContent()
                     drawRect(Edge.Accent, size = androidx.compose.ui.geometry.Size(4.dp.toPx(), size.height))
                 } else Modifier,
