@@ -97,6 +97,11 @@ fun SearchScreen(vm: AppViewModel) {
     val clock by vm.clock.collectAsStateWithLifecycle()
     val allChannels by vm.channels.collectAsStateWithLifecycle()
     val recent by SearchKit.recent.collectAsStateWithLifecycle()
+    val games by vm.sportsGames.collectAsStateWithLifecycle()
+    val nfl by vm.nflBoard.collectAsStateWithLifecycle()
+    val lookup by vm.sportsLookup.collectAsStateWithLifecycle()
+    // Ask: direct answers (live games, picks, props) ahead of the ordinary results.
+    val answers = remember(query, games, nfl) { com.edgestream.tv.data.Ask.answer(query, games, nfl) }
     val groups = remember(allChannels) {
         allChannels.asSequence()
             .map { NameCleaner.tidyGroup(it.groupName) }
@@ -175,18 +180,32 @@ fun SearchScreen(vm: AppViewModel) {
                 onClearRecent = { SearchKit.clearRecent() },
             )
         }
-        val empty = results.channels.isEmpty() && results.programmes.isEmpty() && results.vod.isEmpty() &&
+        val empty = answers.isEmpty() && results.channels.isEmpty() && results.programmes.isEmpty() && results.vod.isEmpty() &&
             results.anywhereMovies.isEmpty() && results.anywhereShows.isEmpty()
         if (empty) {
             EmptyState(
                 if (query.trim().length < 2) "Find anything" else "No matches for “${query.trim()}”",
-                "Search channels, what's on in the guide, movies and series.",
+                "Search channels, the guide, movies and series. Ask for a team, \"live\", \"locks\" or \"props\".",
                 Modifier.fillMaxSize(),
                 icon = Icons.Rounded.Search,
             )
             return@Column
         }
         LazyColumn(contentPadding = PaddingValues(top = 20.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+            if (answers.isNotEmpty()) item {
+                com.edgestream.tv.ui.components.Shelf("Answers · ${answers.size}") {
+                    items(answers, key = { a -> a.title + a.detail }) { a ->
+                        AnswerCard(a) {
+                            when (a) {
+                                is com.edgestream.tv.data.Ask.Answer.Live -> lookup.find(a.game)?.let { ch -> vm.playChannel(ch, vm.zapListFor(ch)) }
+                                    ?: vm.showNotice("No channel in your lineup is carrying ${a.game.away.abbr} v ${a.game.home.abbr}")
+                                is com.edgestream.tv.data.Ask.Answer.Pick -> vm.openNflPick(a.pick.espnId)
+                                is com.edgestream.tv.data.Ask.Answer.Prop -> vm.openNflPick(a.pick.espnId)
+                            }
+                        }
+                    }
+                }
+            }
             if (results.channels.isNotEmpty()) item {
                 com.edgestream.tv.ui.components.Shelf("Channels \u00b7 ${results.channels.size}") {
                     items(results.channels, key = { it.key }) { ch ->
@@ -318,6 +337,23 @@ private fun SuggestionRail(
 }
 
 /** A text field that behaves on a remote: OK opens the keyboard, focus is clearly visible. */
+/** One Ask answer: what it is, the answer itself, and the detail that backs it. */
+@Composable
+private fun AnswerCard(a: com.edgestream.tv.data.Ask.Answer, onClick: () -> Unit) {
+    val kind = when (a) {
+        is com.edgestream.tv.data.Ask.Answer.Live -> "LIVE"
+        is com.edgestream.tv.data.Ask.Answer.Pick -> "NFL PICK"
+        is com.edgestream.tv.data.Ask.Answer.Prop -> "PROP"
+    }
+    FocusSurface(onClick = onClick, modifier = Modifier.width(380.dp).height(112.dp)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(kind, style = MaterialTheme.typography.labelSmall, color = Edge.Accent)
+            Text(a.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text(a.detail, style = MaterialTheme.typography.labelMedium, color = Edge.Dim, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
+    }
+}
+
 @Composable
 fun SearchField(
     value: String,

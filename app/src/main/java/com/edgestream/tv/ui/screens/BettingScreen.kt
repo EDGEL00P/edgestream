@@ -85,7 +85,8 @@ fun BettingScreen(vm: AppViewModel) {
     val loaded by vm.sportsFeed.loaded.collectAsStateWithLifecycle()
     val loading = !loaded
     val nfl by vm.nflBoard.collectAsStateWithLifecycle()
-    var marketMode by remember { mutableStateOf("all") }
+    val nflFocus by vm.nflFocus.collectAsStateWithLifecycle()
+    var marketMode by remember { mutableStateOf(if (nflFocus != null) "nfl" else "all") }
     var gameSheet by remember { mutableStateOf<Sports.Game?>(null) }
     var raceSheet by remember { mutableStateOf<Racing.Race?>(null) }
     val firstRow = remember { FocusRequester() }
@@ -123,7 +124,10 @@ fun BettingScreen(vm: AppViewModel) {
     if (marketMode == "nfl") {
         Column(Modifier.fillMaxSize().padding(start = 16.dp, top = 18.dp, end = 42.dp, bottom = 26.dp)) {
             marketChips()
-            NflHub(nfl, settings.use24h, onOpen = { gameSheet = it }, modifier = Modifier.weight(1f).padding(top = 14.dp))
+            NflHub(
+                nfl, settings.use24h, onOpen = { gameSheet = it }, modifier = Modifier.weight(1f).padding(top = 14.dp),
+                startAt = nflFocus, onStarted = { vm.nflFocus.value = null },
+            )
         }
     } else
     FocusDimGroup {

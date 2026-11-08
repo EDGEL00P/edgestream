@@ -878,6 +878,14 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
         }
     }
 
+    /** An NFL game the Odds hub should open on (from Ask); the hub clears it once shown. */
+    val nflFocus = MutableStateFlow<String?>(null)
+
+    fun openNflPick(espnId: String) {
+        nflFocus.value = espnId
+        screen.value = Screen.BETTING
+    }
+
     /** NFL Picks: model winners for upcoming games plus rule-based value picks. Score ticks don't rebuild it. */
     val nflBoard: StateFlow<com.edgestream.tv.data.NflPicks.Board?> =
         combine(

@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,7 +50,15 @@ import kotlin.math.roundToInt
  * OK opens the game sheet to watch it.
  */
 @Composable
-fun NflHub(board: NflPicks.Board?, use24h: Boolean, onOpen: (Sports.Game) -> Unit, modifier: Modifier = Modifier) {
+fun NflHub(
+    board: NflPicks.Board?,
+    use24h: Boolean,
+    onOpen: (Sports.Game) -> Unit,
+    modifier: Modifier = Modifier,
+    /** ESPN game id to open on (from Ask); [onStarted] fires once it has focus. */
+    startAt: String? = null,
+    onStarted: () -> Unit = {},
+) {
     if (board == null) {
         Text("Loading NFL model…", style = MaterialTheme.typography.bodyLarge, color = Edge.Dim, modifier = modifier.padding(top = 18.dp))
         return
@@ -58,7 +67,15 @@ fun NflHub(board: NflPicks.Board?, use24h: Boolean, onOpen: (Sports.Game) -> Uni
         Text("No upcoming NFL games with a line yet.", style = MaterialTheme.typography.bodyLarge, color = Edge.Dim, modifier = modifier.padding(top = 18.dp))
         return
     }
-    var selectedId by remember { mutableStateOf(board.picks.first().espnId) }
+    var selectedId by remember { mutableStateOf(startAt?.takeIf { id -> board.picks.any { it.espnId == id } } ?: board.picks.first().espnId) }
+    val startFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(startAt) {
+        if (startAt != null && board.picks.any { it.espnId == startAt }) {
+            kotlinx.coroutines.delay(150)
+            runCatching { startFocus.requestFocus() }
+            onStarted()
+        }
+    }
     val selected = board.picks.firstOrNull { it.espnId == selectedId } ?: board.picks.first()
     androidx.compose.runtime.LaunchedEffect(selected.espnId) { com.edgestream.tv.ui.components.RoomLight.of(selected.game) }
     androidx.compose.runtime.DisposableEffect(Unit) { onDispose { com.edgestream.tv.ui.components.RoomLight.clear() } }
@@ -77,6 +94,7 @@ fun NflHub(board: NflPicks.Board?, use24h: Boolean, onOpen: (Sports.Game) -> Uni
                             l.espnGame == pick.espnId && (NflProps.playsFor(l.player, pick.game.home.abbr) || NflProps.playsFor(l.player, pick.game.away.abbr))
                         },
                         onFocus = { selectedId = pick.espnId },
+                        requester = if (pick.espnId == startAt) startFocus else null,
                         onClick = { onOpen(pick.game) },
                     )
                 }
@@ -88,12 +106,22 @@ fun NflHub(board: NflPicks.Board?, use24h: Boolean, onOpen: (Sports.Game) -> Uni
 }
 
 @Composable
-private fun SlateRow(pick: NflPicks.Pick, use24h: Boolean, selected: Boolean, props: Int, onFocus: () -> Unit, onClick: () -> Unit) {
+private fun SlateRow(
+    pick: NflPicks.Pick,
+    use24h: Boolean,
+    selected: Boolean,
+    props: Int,
+    onFocus: () -> Unit,
+    requester: androidx.compose.ui.focus.FocusRequester? = null,
+    onClick: () -> Unit,
+) {
     val g = pick.game
     FocusSurface(
         onClick = onClick, selected = selected, focusScale = 1.02f, glow = false,
         memoryKey = "betting:nfl|${pick.espnId}",
-        modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) onFocus() },
+        modifier = Modifier.fillMaxWidth()
+            .then(if (requester != null) Modifier.focusRequester(requester) else Modifier)
+            .onFocusChanged { if (it.isFocused) onFocus() },
     ) { focused ->
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             TeamLogo(g.away.logo, g.away.name, size = 26.dp)
