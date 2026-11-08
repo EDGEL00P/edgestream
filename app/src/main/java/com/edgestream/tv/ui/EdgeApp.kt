@@ -262,9 +262,9 @@ fun EdgeApp(vm: AppViewModel = viewModel()) {
     AmbientBackground(Modifier.fillMaxSize().then(if (fullscreen) Modifier.background(Color.Black) else Modifier), plain = (backdrop != null || reels.isNotEmpty()) && !fullscreen) {
         // Real game highlights on Home (photos until then). An open section gets the still photo:
         // broadcast clips carry burned-in scoreboards that read through any shade over lists.
-        if (!fullscreen && motionOn && reels.isNotEmpty() && screen == Screen.HOME) {
+        if (!fullscreen && motionOn && reels.isNotEmpty() && screen == Screen.HOME && !com.edgestream.tv.PressMode.on) {
             com.edgestream.tv.ui.glass.VideoBackdrop(reels, sound = vm.settings.collectAsStateWithLifecycle().value.backdropSound, modifier = Modifier.fillMaxSize())
-        } else if (!fullscreen && backdrop != null) {
+        } else if (!fullscreen && backdrop != null && !com.edgestream.tv.PressMode.on) {
             // Real photos, each with a slow documentary move, cross-fading to the next. The move is
             // read only in the draw phase (graphicsLayer), so nothing recomposes per frame.
             androidx.compose.animation.Crossfade(backdrop, animationSpec = androidx.compose.animation.core.tween(2_000), label = "backdrop") { b ->

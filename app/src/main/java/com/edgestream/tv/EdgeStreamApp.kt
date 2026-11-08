@@ -35,6 +35,7 @@ class EdgeStreamApp : Application(), SingletonImageLoader.Factory {
         com.edgestream.tv.ui.FocusMemory.init(this)
         com.edgestream.tv.ui.UiSounds.init(this)
         com.edgestream.tv.data.SearchKit.init(this)
+        PressMode.init(this)
         com.edgestream.tv.data.ChannelIdentities.init(this, appScope)
         repository = Repository(EdgeDatabase.create(this), settings, cacheDir, EpgMap.load(this))
         player = PlayerEngine(this, settings)
@@ -81,7 +82,14 @@ class EdgeStreamApp : Application(), SingletonImageLoader.Factory {
 
     override fun newImageLoader(context: PlatformContext): ImageLoader =
         ImageLoader.Builder(context)
-            .components { add(OkHttpNetworkFetcherFactory(callFactory = { Http.client })) }
+            .components {
+                add(OkHttpNetworkFetcherFactory(callFactory = { Http.client }))
+                // Press mode: no third-party image loads anywhere; screens show their placeholders.
+                add(coil3.intercept.Interceptor { chain ->
+                    if (PressMode.on) coil3.request.ErrorResult(null, chain.request, IllegalStateException("press mode"))
+                    else chain.proceed()
+                })
+            }
             .memoryCache { MemoryCache.Builder().maxSizePercent(context, 0.2).build() }
             .diskCache { DiskCache.Builder().directory(cacheDir.resolve("images")).maxSizeBytes(150L * 1024 * 1024).build() }
             .build()
