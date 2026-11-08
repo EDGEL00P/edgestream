@@ -16,6 +16,9 @@ for cc in ["US", "GB", "CA", "AU", "NZ", "IE"]:
 for c in ["Brisbane", "Sydney", "Melbourne", "Perth", "Adelaide", "Canberra", "Hobart", "Darwin"]:
     GUIDES.append(f"https://i.mjh.nz/au/{c}/epg.xml.gz")
 GUIDES += ["https://i.mjh.nz/nz/epg.xml.gz", "https://epgtalk.com/guide.xml.gz"]
+# UK community guides the TV already used by name (measured +9 channels each).
+GUIDES += ["https://raw.githubusercontent.com/tv1973/xmltv_uk/refs/heads/master/epg.xml",
+           "https://raw.githubusercontent.com/farleyflex/epg-guide/refs/heads/main/epg.xml"]
 
 
 def channels(url):

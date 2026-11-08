@@ -1,0 +1,38 @@
+# The TV's guide in one file. Every 6 hours: download the public guides the lineup uses
+# (tools/epg/wanted.json), keep only those channels for the next 48 hours, and publish the result
+# as the "epg" release asset that EdgeStream downloads instead of ~30 separate guides.
+name: Merged guide
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: merged-guide
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build the merged guide
+        run: python tools/epg/build_merged.py edgestream-epg.xml.gz
+
+      - name: Publish it as the epg release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view epg >/dev/null 2>&1 || gh release create epg --title "Merged guide" \
+            --notes "Rebuilt every 6 hours from the public guides EdgeStream's lineup uses. Downloaded by the app; not a software release." --latest=false
+          gh release upload epg edgestream-epg.xml.gz --clobber

@@ -34,6 +34,14 @@ data class SyncStatus(val running: Boolean = false, val message: String = "")
  * buckets can reach a day past the focused time, so two days keeps every visible cell filled.
  */
 private const val GUIDE_AHEAD_MS = 48 * 3_600_000L
+
+/** Built every 6 h by .github/workflows/epg.yml from tools/epg/wanted.json. */
+internal const val MERGED_GUIDE = "https://github.com/EDGEL00P/edgestream/releases/download/epg/edgestream-epg.xml.gz"
+
+private fun mergedGuideAvailable(): Boolean = runCatching {
+    Http.client.newBuilder().callTimeout(10, java.util.concurrent.TimeUnit.SECONDS).build()
+        .newCall(okhttp3.Request.Builder().url(MERGED_GUIDE).head().build()).execute().use { it.isSuccessful }
+}.getOrDefault(false)
 /** Games that started this long ago can still be live (cricket, golf, a long NFL game). */
 private const val GUIDE_BACK_MS = 6 * 3_600_000L
 private const val SPORTS_GUIDE_AHEAD_MS = 12 * 3_600_000L
@@ -603,7 +611,11 @@ class Repository(
         // viewer's country, then one for each country the channels themselves come from (a UK
         // channel needs a UK guide no matter where the TV is).
         val channels = languageFiltered(db.channels().forSource(source.id))
-        val auto = if (!settings.value.autoGuides) emptyList() else {
+        // One merged guide, rebuilt on GitHub from every public guide this lineup uses, replaces
+        // the ~30 per-guide downloads (15-20 min on a SHIELD). If it can't be reached, the
+        // per-guide path below runs exactly as before.
+        val merged = settings.value.autoGuides && mergedGuideAvailable()
+        val auto = if (!settings.value.autoGuides || merged) emptyList() else {
             val loc = runCatching { PublicApis.location() }.getOrNull()
             val home = PublicApis.countryFromUrl(source.url) ?: loc?.countryCode
             val fromChannels = channelCountries(channels)
@@ -620,9 +632,12 @@ class Repository(
         val premapped = HashMap<String, MutableMap<Long, String>>()
         channels.forEach { c ->
             (epgMap.lookup(c.name, channelCountry(c)) ?: ChannelIdentities.current?.get(c.identity)?.takeIf { it.feed == null }?.let { epgMap.lookup(it.name, it.country.lowercase()) })
-                ?.let { (url, id) -> premapped.getOrPut(url) { HashMap() }[c.id] = id }
+                ?.let { (url, id) -> premapped.getOrPut(if (merged) MERGED_GUIDE else url) { HashMap() }[c.id] = id }
         }
-        val mapped = epgMap.guides.filter { it in premapped }.map { PublicApis.Guide(it) }
+        // The merged file keeps every source guide's own ids and names, so mapped and
+        // name-matched channels both resolve against it unchanged.
+        val mapped = if (merged) listOf(PublicApis.Guide(MERGED_GUIDE))
+            else epgMap.guides.filter { it in premapped }.map { PublicApis.Guide(it) }
         // Checked name mappings, then the clean public guides (name-first matching), then the
         // provider's own guide as the fallback for channels nothing else knows.
         val guides = (mapped + auto + explicit.map { PublicApis.Guide(it) }).distinctBy { it.url }
