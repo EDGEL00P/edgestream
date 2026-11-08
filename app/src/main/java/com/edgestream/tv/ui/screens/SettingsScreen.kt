@@ -107,16 +107,13 @@ private val USER_AGENTS = listOf(
 
 /** Settings categories, shown as a list on the left like the system settings on Android TV. */
 private enum class SettingsPage(val title: String, val hint: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    ACCOUNTS("Providers", "Playlists, logins and sync", Icons.Rounded.AccountCircle),
-    PROFILES("Profiles", "Who's watching, PINs", Icons.Rounded.People),
-    CHANNELS("Channels", "Language, order, hidden groups", Icons.Rounded.LiveTv),
-    GUIDE("Guide", "Guide sources, refresh and timing", Icons.Rounded.CalendarViewWeek),
-    PLAYBACK("Playback & Quality", "Buffering, frame rate, latency", Icons.Rounded.PlayCircle),
-    SUBTITLES("Audio & Captions", "Languages and subtitles", Icons.Rounded.ClosedCaption),
-    APPEARANCE("Appearance & Theme", "Theme, clock, weather, sounds", Icons.Rounded.Palette),
-    EXTRAS("Services & API Keys", "TMDB, debrid, stream addons", Icons.Rounded.AutoAwesome),
-    TRANSFER("Transfer Setup", "Copy everything to another TV", Icons.Rounded.SwapHoriz),
-    REMOTE("Remote & About", "Phone remote and about", Icons.Rounded.SettingsRemote),
+    ACCOUNTS("Providers", "Your playlists and logins, media servers and free channels", Icons.Rounded.AccountCircle),
+    CHANNELS("Channels & Guide", "Which channels show, their order, and the TV guide", Icons.Rounded.LiveTv),
+    PLAYBACK("Playback", "Picture, delay, audio and subtitles", Icons.Rounded.PlayCircle),
+    APPEARANCE("Appearance", "Theme, clock, weather and sounds", Icons.Rounded.Palette),
+    PROFILES("Profiles", "Who's watching and PINs", Icons.Rounded.People),
+    EXTRAS("Accounts & Keys", "Optional keys for artwork, voice, watch tracking, debrid and lightning", Icons.Rounded.VpnKey),
+    REMOTE("Remote & Transfer", "Phone remote, and copying this setup to another TV", Icons.Rounded.SettingsRemote),
     SYSTEM("Shield & Device", "Memory, storage, apps and maintenance", Icons.Rounded.Speed),
 }
 
@@ -137,13 +134,16 @@ fun SettingsScreen(vm: AppViewModel) {
     var place by remember { mutableStateOf<PanelPlace>(PanelPlace.Root) }
     var lastRow by rememberSaveable { mutableStateOf<String?>(null) }
     var focusedRow by remember { mutableStateOf<StageItem?>(null) }
+    var help by remember { mutableStateOf<StageItem?>(null) }
+    LaunchedEffect(place) { help = null }
     androidx.activity.compose.BackHandler(enabled = place != PanelPlace.Root) { place = PanelPlace.Root }
-    // Inside a page the stage shows that page; on the list it follows focus.
+    // The left side explains whatever is focused: the page on the list, the row inside a page.
     val stage = when (val p = place) {
         PanelPlace.Root -> focusedRow
-        is PanelPlace.Edge -> StageItem(p.page.icon, p.page.title, p.page.hint)
+        is PanelPlace.Edge -> help?.let { it.copy(icon = it.icon ?: p.page.icon) } ?: StageItem(p.page.icon, p.page.title, p.page.hint)
         is PanelPlace.Device -> StageItem(p.page.icon, p.page.title, p.page.hint)
     }
+    androidx.compose.runtime.CompositionLocalProvider(LocalSettingHelp provides { help = it }) {
     Box(Modifier.fillMaxSize()) {
         stage?.let { SettingsStage(it, Modifier.align(Alignment.CenterStart).padding(start = 40.dp, end = PANEL_WIDTH + 40.dp)) }
         Column(
@@ -157,19 +157,36 @@ fun SettingsScreen(vm: AppViewModel) {
             }
         }
     }
+    }
+}
+
+/** Rows report themselves here when focused, so their explanation shows large on the left. */
+private val LocalSettingHelp = androidx.compose.runtime.staticCompositionLocalOf<(StageItem) -> Unit> { {} }
+
+/** Whether the row being drawn is focused (white), so its value can switch to dark text. */
+private val LocalRowFocused = androidx.compose.runtime.compositionLocalOf { false }
+
+/** A row's current value, right-aligned in grey like tvOS. */
+@Composable
+private fun RowValue(text: String) {
+    Text(text, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        color = if (LocalRowFocused.current) Edge.Bg.copy(alpha = 0.65f) else Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA),
+        modifier = Modifier.padding(start = 12.dp).widthIn(max = 220.dp))
 }
 
 private val PANEL_WIDTH = 460.dp
 
-private data class StageItem(val icon: androidx.compose.ui.graphics.vector.ImageVector, val title: String, val hint: String)
+private data class StageItem(val icon: androidx.compose.ui.graphics.vector.ImageVector?, val title: String, val hint: String?)
 
 /** The left of Settings: the focused section, large, straight on the picture. */
 @Composable
 private fun SettingsStage(item: StageItem, modifier: Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Icon(item.icon, null, Modifier.size(84.dp), tint = Edge.Accent)
-        Text(item.title, style = MaterialTheme.typography.displaySmall, color = Edge.Text, maxLines = 2)
-        Text(item.hint, style = MaterialTheme.typography.titleMedium, color = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA), maxLines = 2)
+        item.icon?.let { Icon(it, null, Modifier.size(84.dp), tint = Edge.Accent) }
+        Text(item.title, style = MaterialTheme.typography.displaySmall, color = Edge.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        item.hint?.takeIf { it.isNotBlank() }?.let {
+            Text(it, style = MaterialTheme.typography.titleMedium, color = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA), maxLines = 6, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -184,12 +201,12 @@ private fun PanelRoot(restore: String?, onFocusRow: (StageItem) -> Unit, onOpen:
         item { PanelSection("EdgeStream") }
         items(edgePages, key = { "edge:${it.name}" }) { p ->
             val key = "edge:${p.name}"
-            PanelRow(p.icon, p.title, p.hint, if (key == firstKey) first else null, onFocus = { onFocusRow(StageItem(p.icon, p.title, p.hint)) }) { onOpen(key, PanelPlace.Edge(p)) }
+            PanelRow(p.icon, p.title, null, if (key == firstKey) first else null, onFocus = { onFocusRow(StageItem(p.icon, p.title, p.hint)) }) { onOpen(key, PanelPlace.Edge(p)) }
         }
         item { PanelSection("Device") }
         items(DevicePage.entries, key = { "device:${it.name}" }) { p ->
             val key = "device:${p.name}"
-            PanelRow(p.icon, p.title, p.hint, if (key == firstKey) first else null, onFocus = { onFocusRow(StageItem(p.icon, p.title, p.hint)) }) { onOpen(key, PanelPlace.Device(p)) }
+            PanelRow(p.icon, p.title, null, if (key == firstKey) first else null, onFocus = { onFocusRow(StageItem(p.icon, p.title, p.hint)) }) { onOpen(key, PanelPlace.Device(p)) }
         }
         item {
             Text("EdgeStream ${BuildConfigInfo.VERSION}", color = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA), fontSize = 13.sp, modifier = Modifier.padding(start = 12.dp, top = 18.dp))
@@ -215,15 +232,17 @@ private fun PanelRow(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().height(if (summary != null) 64.dp else 52.dp).then(if (requester != null) Modifier.focusRequester(requester) else Modifier)
             .onFocusChanged { if (it.isFocused) onFocus() },
-        shape = RoundedCornerShape(6.dp), color = Color.Transparent, focusedColor = Edge.Text.copy(alpha = 0.14f),
-        focusScale = 1f, glow = false,
-    ) {
-        Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, Modifier.size(24.dp), tint = Edge.Text)
-            Column(Modifier.padding(start = 18.dp)) {
-                Text(title, color = Edge.Text, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (summary != null) Text(summary, color = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        shape = RoundedCornerShape(10.dp), color = Color.Transparent, focusedColor = Edge.Text,
+        focusScale = 1.03f, glow = false,
+    ) { focused ->
+        val ink = if (focused) Edge.Bg else Edge.Text
+        Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, Modifier.size(24.dp), tint = ink)
+            Column(Modifier.padding(start = 18.dp).weight(1f)) {
+                Text(title, color = ink, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (summary != null) Text(summary, color = ink.copy(alpha = SECONDARY_TEXT_ALPHA), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            Icon(Icons.Rounded.ChevronRight, null, Modifier.size(22.dp), tint = ink.copy(alpha = 0.5f))
         }
     }
 }
@@ -243,50 +262,70 @@ private fun SettingsPageContent(vm: AppViewModel, page: SettingsPage) {
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = 8.dp, bottom = 64.dp, start = 4.dp, end = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        item { Text(page.title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)) }
+        item { Text(page.title, color = Edge.Text, fontSize = 28.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp)) }
         when (page) {
             SettingsPage.ACCOUNTS -> {
                 items(sources.orEmpty(), key = { it.id }) { src -> SourceCard(vm, src) }
                 item {
                     if (adding) AddSourceForm(vm, Modifier.padding(top = 8.dp), first, onDone = { adding = false })
-                    else Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        EdgeButton("Add Provider", { adding = true }, primary = true, icon = Icons.Rounded.Add)
-                        EdgeButton("Refresh All Providers", { vm.refreshAll() }, icon = Icons.Rounded.Sync)
+                    else Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        SettingRow("Add Provider", "Add an Xtream login or an M3U playlist. The phone remote can type the details for you.", { adding = true }, icon = Icons.Rounded.Add) {}
+                        SettingRow("Refresh All Providers", "Downloads every provider's channels, films and series again.", { vm.refreshAll() }, icon = Icons.Rounded.Sync) {}
                     }
+                }
+                item { PanelSection("Free Channels") }
+                item {
+                    SettingRow("Add Free Channels for ${vm.countryCode ?: "My Country"}", "Free-to-air channels for your country from the open iptv-org project.",
+                        { vm.addFreeChannels(local = true) }, icon = Icons.Rounded.Add) {}
+                }
+                item {
+                    SettingRow("Add Free Channels Worldwide", "Every free-to-air channel the open iptv-org project lists, from all countries.",
+                        { vm.addFreeChannels(local = false) }, icon = Icons.Rounded.Public) {}
                 }
                 item { PanelSection("Media Servers") }
                 item { MediaServerSettings() }
+                item { PanelSection("Connection") }
+                item {
+                    Cycle("Live Stream Format", if (s.liveFormat == "ts") "MPEG-TS" else "HLS",
+                        "Xtream providers only. MPEG-TS has the lowest delay; HLS works with more providers.", icon = Icons.Rounded.PlayCircle) {
+                        set { it.copy(liveFormat = if (it.liveFormat == "ts") "m3u8" else "ts") }
+                    }
+                }
+                item {
+                    Cycle("Player Identity", s.userAgent.substringBefore(' '), "Some providers only accept certain players. Change this if a provider refuses to play.", icon = Icons.Rounded.Devices) {
+                        set { it.copy(userAgent = next(USER_AGENTS, it.userAgent)) }
+                    }
+                }
             }
 
             SettingsPage.PROFILES -> item { ProfilesSettings(vm) }
 
-            SettingsPage.TRANSFER -> item { TransferSettings(vm) }
-
             SettingsPage.CHANNELS -> {
                 item {
-                    Toggle("English channels only", "Only English channels, films and series are downloaded and shown; the guide is matched only for them", s.englishOnly, icon = Icons.Rounded.Language) {
+                    Toggle("English Channels Only", "Only English channels, films and series are downloaded and shown, and the guide is matched only for them.", s.englishOnly, icon = Icons.Rounded.Language) {
                         set { it.copy(englishOnly = !it.englishOnly) }
                     }
                 }
                 item {
-                    Cycle("Sort groups", GROUP_SORTS.firstOrNull { it.first == s.groupSort }?.second ?: "Provider order", icon = Icons.Rounded.Folder) {
+                    Cycle("Sort Groups", GROUP_SORTS.firstOrNull { it.first == s.groupSort }?.second ?: "Provider order", "The order of groups in Live TV and the Guide.", icon = Icons.Rounded.Folder) {
                         set { it.copy(groupSort = next(GROUP_SORTS.map { g -> g.first }, it.groupSort)) }
                     }
                 }
                 item {
-                    Cycle("Sort channels", CHANNEL_SORTS.firstOrNull { it.first == s.channelSort }?.second ?: "Channel number", icon = Icons.Rounded.Sort) {
+                    Cycle("Sort Channels", CHANNEL_SORTS.firstOrNull { it.first == s.channelSort }?.second ?: "Channel number", "The order of channels inside each group.", icon = Icons.Rounded.Sort) {
                         set { it.copy(channelSort = next(CHANNEL_SORTS.map { c -> c.first }, it.channelSort)) }
                     }
                 }
-                item { Toggle("Hide offline channels", "Channels a check found not responding (Playlists › Check channels)", s.hideOffline, icon = Icons.Rounded.LinkOff) { set { it.copy(hideOffline = !it.hideOffline) } } }
-                item { Toggle("Hide adult groups", "Hides groups named XXX, Adult, 18+ and similar", s.hideAdult, icon = Icons.Rounded.VisibilityOff) { set { it.copy(hideAdult = !it.hideAdult) } } }
-                item { Toggle("Clean up channel names", "“UK: BBC One FHD [Geo-blocked]” → “BBC One” with quality badges", s.cleanNames, icon = Icons.Rounded.Brush) { set { it.copy(cleanNames = !it.cleanNames) } } }
+                item { Toggle("Hide Offline Channels", "Hides channels that didn't respond the last time a provider's channels were checked.", s.hideOffline, icon = Icons.Rounded.LinkOff) { set { it.copy(hideOffline = !it.hideOffline) } } }
+                item { Toggle("Hide Adult Groups", "Hides groups with adult or 18+ names.", s.hideAdult, icon = Icons.Rounded.VisibilityOff) { set { it.copy(hideAdult = !it.hideAdult) } } }
+                item { Toggle("Fill In Missing Logos", "Uses the open iptv-org logo database for channels without a logo.", s.fillLogos, icon = Icons.Rounded.Image) { set { it.copy(fillLogos = !it.fillLogos) } } }
+                item { Toggle("Clean Up Channel Names", "Turns “UK: BBC One FHD [Geo-blocked]” into “BBC One” with a quality badge.", s.cleanNames, icon = Icons.Rounded.Brush) { set { it.copy(cleanNames = !it.cleanNames) } } }
                 if (s.cleanNames) item {
                     var rx by remember(s.nameRegex) { mutableStateOf(s.nameRegex) }
                     val invalid = rx.isNotBlank() && com.edgestream.tv.data.NameCleaner(rx).custom == null
-                    Column(Modifier.glass(RoundedCornerShape(12.dp)).padding(horizontal = 18.dp, vertical = 10.dp)) {
+                    Column(Modifier.padding(horizontal = 12.dp)) {
                         Field("Also remove (regular expression)", rx, """e.g.  \s*\b(backup|vip|raw)\b""") {
                             rx = it
                             if (com.edgestream.tv.data.NameCleaner(it).custom != null || it.isBlank()) set { st -> st.copy(nameRegex = it) }
@@ -294,44 +333,37 @@ private fun SettingsPageContent(vm: AppViewModel, page: SettingsPage) {
                         if (invalid) Text("That pattern isn't valid yet; the last valid one is still used.", style = MaterialTheme.typography.bodyMedium, color = Edge.Alert)
                     }
                 }
-                // Every group Live TV and the Guide show; switching one off hides it in both.
-                item { PanelSection("Groups") }
-                if (groups.isEmpty()) item { Text("Groups appear here once your channels have loaded.", style = MaterialTheme.typography.bodyMedium, color = Edge.Dim, modifier = Modifier.padding(horizontal = 18.dp)) }
-                groups.forEach { (name, count) ->
-                    item(key = "group:$name") {
-                        val shown = name !in s.hiddenGroups
-                        Toggle(name, "$count channels" + if (shown) "" else " · hidden", shown) { vm.setGroupHidden(name, shown) }
-                    }
-                }
-            }
-
-            SettingsPage.GUIDE -> {
+                item { PanelSection("Guide") }
                 item {
-                    Cycle("Automatic refresh", "Every ${s.epgRefreshHours} hours", icon = Icons.Rounded.Sync) {
+                    Cycle("Automatic Refresh", "Every ${s.epgRefreshHours} hours", "How often the guide downloads again.", icon = Icons.Rounded.Sync) {
                         set { it.copy(epgRefreshHours = next(listOf(6, 12, 24, 48), it.epgRefreshHours)) }
                     }
                 }
                 item {
-                    Toggle("Find free guides automatically", "Fills gaps from epgshare01, epg.pw and i.mjh.nz for the countries your channels come from", s.autoGuides, icon = Icons.Rounded.AutoAwesome) {
-                        set { it.copy(autoGuides = !it.autoGuides) }
-                    }
-                }
-                item {
                     Cycle(
-                        "Guide time offset",
+                        "Guide Time Offset",
                         if (s.epgOffsetMinutes == 0) "None" else "%+d min".format(s.epgOffsetMinutes),
-                        "Fixes guides that are early or late. Applies at the next guide update.",
+                        "Moves every programme earlier or later, for guides that run early or late. Applies at the next guide update.",
                         icon = Icons.Rounded.Schedule,
                     ) { set { it.copy(epgOffsetMinutes = next((-180..180 step 30).toList(), it.epgOffsetMinutes)) } }
                 }
                 items(sources.orEmpty(), key = { "g${it.id}" }) { src ->
-                    Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(16.dp)).padding(18.dp)) {
-                        Text(src.name, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            if (src.lastEpgRefresh > 0) "Updated ${Format.ago(src.lastEpgRefresh)} · ${src.guideMatched} of ${src.channelCount} channels matched" else "Not updated yet",
-                            style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 2.dp),
-                        )
-                        EdgeButton("Update Guide", { vm.refreshEpg(src.id) }, Modifier.padding(top = 12.dp), icon = Icons.Rounded.Sync)
+                    SettingRow(
+                        "Update Guide · ${src.name}",
+                        if (src.lastEpgRefresh > 0) "Updated ${Format.ago(src.lastEpgRefresh)}. ${src.guideMatched} of ${src.channelCount} channels have a guide. Press OK to update it now."
+                        else "Not updated yet. Press OK to update it now.",
+                        { vm.refreshEpg(src.id) }, icon = Icons.Rounded.CalendarViewWeek,
+                    ) {
+                        if (src.lastEpgRefresh > 0) RowValue("${src.guideMatched} / ${src.channelCount}")
+                    }
+                }
+                // Every group Live TV and the Guide show; switching one off hides it in both.
+                item { PanelSection("Groups") }
+                if (groups.isEmpty()) item { Text("Groups appear here once your channels have loaded.", style = MaterialTheme.typography.bodyMedium, color = Edge.Dim, modifier = Modifier.padding(horizontal = 12.dp)) }
+                groups.forEach { (name, count) ->
+                    item(key = "group:$name") {
+                        val shown = name !in s.hiddenGroups
+                        Toggle(name, "$count channels" + if (shown) "" else ", hidden from Live TV and the Guide", shown) { vm.setGroupHidden(name, shown) }
                     }
                 }
             }
@@ -339,7 +371,7 @@ private fun SettingsPageContent(vm: AppViewModel, page: SettingsPage) {
             SettingsPage.PLAYBACK -> {
                 item {
                     val mode = when { !s.livePreview -> "Off"; s.previewSound -> "With sound"; else -> "Silent" }
-                    Cycle("Channel preview", mode, "Plays the highlighted channel in the preview window while you browse", icon = Icons.Rounded.LiveTv) {
+                    Cycle("Channel Preview", mode, "Plays the highlighted channel in the preview window while you browse.", icon = Icons.Rounded.LiveTv) {
                         set {
                             when { !it.livePreview -> it.copy(livePreview = true, previewSound = false)
                                 !it.previewSound -> it.copy(previewSound = true)
@@ -348,195 +380,116 @@ private fun SettingsPageContent(vm: AppViewModel, page: SettingsPage) {
                     }
                 }
                 if (s.livePreview) item {
-                    Cycle("Preview starts after", "%.1f seconds".format(s.previewDelayMs / 1000f), "Longer means scrolling past channels never triggers a preview", icon = Icons.Rounded.Timer) {
+                    Cycle("Preview Starts After", "%.1f seconds".format(s.previewDelayMs / 1000f), "Longer means scrolling past channels never starts a preview.", icon = Icons.Rounded.Timer) {
                         set { it.copy(previewDelayMs = next(listOf(800, 1_500, 2_500, 4_000), it.previewDelayMs)) }
                     }
                 }
-                item { Toggle("Preview last channel on launch", "Plays silently in the Home window", s.resumeLastChannel, icon = Icons.Rounded.Home) { set { it.copy(resumeLastChannel = !it.resumeLastChannel) } } }
+                item { Toggle("Preview Last Channel", "Plays the last channel silently on Home when EdgeStream opens.", s.resumeLastChannel, icon = Icons.Rounded.Home) { set { it.copy(resumeLastChannel = !it.resumeLastChannel) } } }
                 item {
-                    Cycle("Live stream format (Xtream)", if (s.liveFormat == "ts") "MPEG-TS · lowest delay" else "HLS · most compatible", icon = Icons.Rounded.PlayCircle) {
-                        set { it.copy(liveFormat = if (it.liveFormat == "ts") "m3u8" else "ts") }
+                    Cycle("Live Delay", "${s.bufferMs} ms", "Lower sits closer to real time. Raise it if a stream stutters.", icon = Icons.Rounded.Speed) {
+                        set { it.copy(bufferMs = next(listOf(1_500, 2_000, 3_000, 5_000, 8_000, 12_000, 15_000), it.bufferMs)) }
                     }
                 }
+                item { Toggle("Match Frame Rate", "Switches the TV to 24, 25, 50 or 60 Hz to match the video. Removes judder; the screen blanks briefly on a change.", s.matchFrameRate, icon = Icons.Rounded.SlowMotionVideo) { set { it.copy(matchFrameRate = !it.matchFrameRate) } } }
+                item { Toggle("Tunnelled Playback", "Hardware audio and video sync. Smoother on SHIELD; turn it off if a stream stutters or has no sound.", s.tunneling, icon = Icons.Rounded.Cable) { set { it.copy(tunneling = !it.tunneling) } } }
+                item { Toggle("Play Next Episode", "When an episode ends, the next one starts on its own.", s.autoNextEpisode, icon = Icons.Rounded.SkipNext) { set { it.copy(autoNextEpisode = !it.autoNextEpisode) } } }
+                item { Toggle("Skip Intros and Credits", "Uses TheIntroDB's community timestamps. Sends the title's IMDb or TMDB id to theintrodb.org; no account needed.", s.useIntroDb, icon = Icons.Rounded.MovieFilter) { set { it.copy(useIntroDb = !it.useIntroDb) } } }
+                item { PanelSection("Audio & Subtitles") }
                 item {
-                    Cycle(
-                        "Live latency",
-                        "${s.bufferMs} ms",
-                        "Exact millisecond target: lower sits closer to real-time; raise it if the stream stutters.",
-                        icon = Icons.Rounded.Speed,
-                    ) { set { it.copy(bufferMs = next(listOf(1_500, 2_000, 3_000, 5_000, 8_000, 12_000, 15_000), it.bufferMs)) } }
-                }
-                item { Toggle("Match frame rate", "Switches the TV to 24/25/50/60 Hz to match the video. Removes judder; the screen blanks briefly on change.", s.matchFrameRate, icon = Icons.Rounded.SlowMotionVideo) { set { it.copy(matchFrameRate = !it.matchFrameRate) } } }
-                item { Toggle("Tunnelled playback", "Hardware audio/video sync. Smoother on SHIELD; turn off if a stream stutters or has no sound.", s.tunneling, icon = Icons.Rounded.Cable) { set { it.copy(tunneling = !it.tunneling) } } }
-                item { Toggle("Auto-start next episode", "When an episode ends, the next one plays without you. Turn off if you prefer the end credits to stay on screen.", s.autoNextEpisode, icon = Icons.Rounded.SkipNext) { set { it.copy(autoNextEpisode = !it.autoNextEpisode) } } }
-                item { Toggle("TheIntroDB skip data", "Community intro, recap and credits timestamps. Sends the title's IMDb/TMDB id to theintrodb.org; no account needed.", s.useIntroDb, icon = Icons.Rounded.MovieFilter) { set { it.copy(useIntroDb = !it.useIntroDb) } } }
-            }
-
-            SettingsPage.SUBTITLES -> {
-                item {
-                    Cycle("Preferred audio language", LANGUAGES.firstOrNull { it.first == s.audioLanguage }?.second ?: s.audioLanguage, icon = Icons.Rounded.VolumeUp) {
+                    Cycle("Audio Language", LANGUAGES.firstOrNull { it.first == s.audioLanguage }?.second ?: s.audioLanguage, "Picks this language when a stream has more than one.", icon = Icons.Rounded.VolumeUp) {
                         set { it.copy(audioLanguage = next(LANGUAGES.map { l -> l.first }, it.audioLanguage)) }
                     }
                 }
-                item { Toggle("Subtitles on by default", "Uses the stream's own subtitle track when it has one", s.subtitlesOn, icon = Icons.Rounded.Subtitles) { set { it.copy(subtitlesOn = !it.subtitlesOn) } } }
+                item { Toggle("Subtitles On", "Turns on the stream's own subtitles whenever it has them.", s.subtitlesOn, icon = Icons.Rounded.Subtitles) { set { it.copy(subtitlesOn = !it.subtitlesOn) } } }
                 item {
-                    Cycle("Preferred subtitle language", LANGUAGES.firstOrNull { it.first == s.subtitleLanguage }?.second ?: s.subtitleLanguage, icon = Icons.Rounded.ClosedCaption) {
+                    Cycle("Subtitle Language", LANGUAGES.firstOrNull { it.first == s.subtitleLanguage }?.second ?: s.subtitleLanguage, "Picks this language when a stream has more than one subtitle track.", icon = Icons.Rounded.ClosedCaption) {
                         set { it.copy(subtitleLanguage = next(LANGUAGES.map { l -> l.first }, it.subtitleLanguage)) }
                     }
                 }
                 item {
-                    Toggle(
-                        "Auto captions",
-                        "English captions generated on the TV from the programme's sound, for streams without subtitles. Downloads a 40 MB speech model the first time.",
-                        s.autoCaptions,
-                        icon = Icons.Rounded.Mic,
-                    ) { set { it.copy(autoCaptions = !it.autoCaptions) } }
+                    Toggle("Auto Captions", "English captions made on the TV from the programme's sound, for streams without subtitles. Downloads a 40 MB speech model the first time.", s.autoCaptions, icon = Icons.Rounded.Mic) {
+                        set { it.copy(autoCaptions = !it.autoCaptions) }
+                    }
                 }
             }
 
             SettingsPage.APPEARANCE -> {
+                item { PanelSection("Theme") }
                 item { ThemePicker(s.theme) { id -> set { it.copy(theme = id) } } }
+                item { PanelSection("Home & Screen") }
                 item {
-                    Cycle("Open on", Screen.entries.firstOrNull { it.name == s.startScreen }?.label ?: "Home", icon = Icons.Rounded.Home) {
+                    Cycle("Open On", Screen.entries.firstOrNull { it.name == s.startScreen }?.label ?: "Home", "The screen EdgeStream opens on.", icon = Icons.Rounded.Home) {
                         set { it.copy(startScreen = next(listOf("HOME", "LIVE", "MOVIES", "SERIES"), it.startScreen)) }
                     }
                 }
-                item { Toggle("24-hour clock", null, s.use24h, icon = Icons.Rounded.Schedule) { set { it.copy(use24h = !it.use24h) } } }
-                item { Toggle("Background sound", "Plays the highlights' audio quietly behind Home", s.backdropSound, icon = Icons.Rounded.VolumeUp) { set { it.copy(backdropSound = !it.backdropSound) } } }
-                item { Toggle("Hide scores", "No spoilers: scores, box scores and play-by-play stay hidden everywhere", s.hideScores, icon = Icons.Rounded.VisibilityOff) { set { it.copy(hideScores = !it.hideScores) } } }
+                item { Toggle("24-Hour Clock", "Shows times as 18:30 instead of 6:30 pm.", s.use24h, icon = Icons.Rounded.Schedule) { set { it.copy(use24h = !it.use24h) } } }
+                item { Toggle("Hide Scores", "No spoilers: scores, box scores and play-by-play stay hidden everywhere.", s.hideScores, icon = Icons.Rounded.VisibilityOff) { set { it.copy(hideScores = !it.hideScores) } } }
+                item { Toggle("Background Sound", "Plays the highlights' sound quietly behind Home.", s.backdropSound, icon = Icons.Rounded.VolumeUp) { set { it.copy(backdropSound = !it.backdropSound) } } }
+                item { Toggle("Interface Sounds", "Soft focus ticks and a confirm tone.", s.uiSounds, icon = Icons.Rounded.GraphicEq) { set { it.copy(uiSounds = !it.uiSounds) } } }
                 item {
-                    Cycle(
-                        "Screen fit (overscan)",
-                        if (s.overscanPercent == 0) "Off · edge to edge" else "${s.overscanPercent}% safe margin",
-                        "Stops TVs that crop the picture from cutting off the nav, clock or text. 5% matches Android TV guidance.",
-                        icon = Icons.Rounded.AspectRatio,
-                    ) { set { it.copy(overscanPercent = next(listOf(0, 2, 3, 4, 5, 6, 8, 10), it.overscanPercent)) } }
+                    Cycle("Screen Fit", if (s.overscanPercent == 0) "Edge to edge" else "${s.overscanPercent}% margin",
+                        "Keeps the clock, menus and text clear of TVs that crop the picture. 5% matches Android TV guidance.", icon = Icons.Rounded.AspectRatio) {
+                        set { it.copy(overscanPercent = next(listOf(0, 2, 3, 4, 5, 6, 8, 10), it.overscanPercent)) }
+                    }
                 }
                 item {
                     Cycle(
-                        "Motion & effects",
-                        when (s.effects) { "full" -> "Full · soft glow"; "balanced" -> "Balanced"; "low" -> "Low · fastest"; else -> "Auto · ${com.edgestream.tv.ui.DeviceTier.tier.name.lowercase()}" },
-                        "Focused cards always lift. This controls the glow and spring cost on weaker TV boxes.",
+                        "Motion & Effects",
+                        when (s.effects) { "full" -> "Full"; "balanced" -> "Balanced"; "low" -> "Low"; else -> "Auto · ${com.edgestream.tv.ui.DeviceTier.tier.name.lowercase()}" },
+                        "Lower it on slower TV boxes: less glow and animation, faster menus.",
                         icon = Icons.Rounded.Animation,
                     ) { set { it.copy(effects = next(listOf("auto", "full", "balanced", "low"), it.effects)) } }
                 }
-                item {
-                    Cycle(
-                        "Radar map",
-                        if (s.radarSatellite) "Satellite" else "Standard",
-                        "Standard uses a light street map; satellite shows terrain and coastlines.",
-                        icon = Icons.Rounded.Radar,
-                    ) { set { it.copy(radarSatellite = !it.radarSatellite) } }
-                }
-                item { Toggle("Interface sounds", "Soft focus ticks and a warm confirm tone", s.uiSounds, icon = Icons.Rounded.GraphicEq) { set { it.copy(uiSounds = !it.uiSounds) } } }
-                item { Toggle("Weather on Home", "Current conditions from Open-Meteo", s.showWeather, icon = Icons.Rounded.WbSunny) { set { it.copy(showWeather = !it.showWeather) } } }
+                item { PanelSection("Weather") }
+                item { Toggle("Weather on Home", "Current conditions from Open-Meteo beside the clock.", s.showWeather, icon = Icons.Rounded.WbSunny) { set { it.copy(showWeather = !it.showWeather) } } }
                 if (s.showWeather) item {
                     WeatherPlacePicker(vm, s.weatherPlace, manual = s.weatherPlace != null || s.weatherCity.isNotBlank(),
                         onPick = { p -> set { it.copy(weatherPlace = p, weatherCity = "") } },
                         onAutomatic = { set { it.copy(weatherPlace = null, weatherCity = "") } })
                 }
-                if (s.showWeather) item { Toggle("Use Fahrenheit", null, s.fahrenheit) { set { it.copy(fahrenheit = !it.fahrenheit) } } }
+                if (s.showWeather) item { Toggle("Fahrenheit", "Shows temperatures in °F instead of °C.", s.fahrenheit, icon = Icons.Rounded.Thermostat) { set { it.copy(fahrenheit = !it.fahrenheit) } } }
+                item {
+                    Cycle("Radar Map", if (s.radarSatellite) "Satellite" else "Standard", "Standard is a light street map; Satellite shows terrain and coastlines.", icon = Icons.Rounded.Radar) {
+                        set { it.copy(radarSatellite = !it.radarSatellite) }
+                    }
+                }
             }
 
             SettingsPage.EXTRAS -> {
+                item { PanelSection("Artwork & Voice") }
                 item {
-                    SecureApiKeyField(
-                        title = "TMDB",
-                        description = "Posters, backdrops, cast and ratings for the library. Get a free key at themoviedb.org.",
-                        savedValue = s.tmdbApiKey,
-                        onSave = { key -> set { it.copy(tmdbApiKey = key) } },
-                    )
+                    SecureApiKeyField("TMDB", "Posters, backdrops, cast and ratings for films and series. Free key at themoviedb.org.", s.tmdbApiKey) { key -> set { it.copy(tmdbApiKey = key) } }
                 }
                 item {
-                    SecureApiKeyField(
-                        title = "Gemini",
-                        description = "Understands voice and typed commands the built-in rules can't, like \"put the Chiefs game on\". Free key at aistudio.google.com. Only the command is sent.",
-                        savedValue = s.geminiApiKey,
-                        onSave = { key -> set { it.copy(geminiApiKey = key) } },
-                    )
+                    SecureApiKeyField("Gemini", "Understands voice and typed commands the built-in rules can't, like “put the Chiefs game on”. Free key at aistudio.google.com. Only the command is sent.", s.geminiApiKey) { key -> set { it.copy(geminiApiKey = key) } }
                 }
                 item { PanelSection("Watch Tracking") }
                 item {
-                    SecureApiKeyField(
-                        title = "Trakt Client ID",
-                        description = "Create an app at trakt.tv/oauth/applications (redirect URI: urn:ietf:wg:oauth:2.0:oob) and paste its Client ID.",
-                        savedValue = s.traktClientId,
-                        onSave = { key -> set { it.copy(traktClientId = key) } },
-                    )
+                    SecureApiKeyField("Trakt Client ID", "Create an app at trakt.tv/oauth/applications (redirect URI urn:ietf:wg:oauth:2.0:oob) and paste its Client ID.", s.traktClientId) { key -> set { it.copy(traktClientId = key) } }
                 }
-                item {
-                    SecureApiKeyField(
-                        title = "Trakt Client Secret",
-                        description = "The same app's Client Secret.",
-                        savedValue = s.traktClientSecret,
-                        onSave = { key -> set { it.copy(traktClientSecret = key) } },
-                    )
-                }
-                item {
-                    SecureApiKeyField(
-                        title = "Simkl Client ID",
-                        description = "Create an app at simkl.com/settings/developer and paste its Client ID.",
-                        savedValue = s.simklClientId,
-                        onSave = { key -> set { it.copy(simklClientId = key) } },
-                    )
-                }
+                item { SecureApiKeyField("Trakt Client Secret", "The same Trakt app's Client Secret.", s.traktClientSecret) { key -> set { it.copy(traktClientSecret = key) } } }
+                item { SecureApiKeyField("Simkl Client ID", "Create an app at simkl.com/settings/developer and paste its Client ID.", s.simklClientId) { key -> set { it.copy(simklClientId = key) } } }
                 item { TrackingLinks(s) }
+                item { PanelSection("Debrid") }
+                item { SecureApiKeyField("Debrid Service", "Your debrid cloud: cached films and episodes. Key at torbox.app › Settings › API.", s.torboxApiKey) { key -> set { it.copy(torboxApiKey = key) } } }
+                item { StreamAddonsCard(vm, s.streamAddons) { list -> set { st -> st.copy(streamAddons = list) } } }
+                item { PanelSection("Lightning") }
                 item {
-                    SecureApiKeyField(
-                        title = "Xweather — real lightning (optional)",
-                        description = "Vaisala Xweather measured strikes (15K/month free at xweather.com/developer/quickstart). Blank keeps the keyless CAPE/LI proxy.",
-                        savedValue = s.xweatherClientId,
-                        onSave = { key -> set { it.copy(xweatherClientId = key) } },
-                    )
+                    SecureApiKeyField("Xweather Client ID", "Measured lightning strikes on Radar (15,000 a month free at xweather.com). Without it, Radar shows storm risk from the forecast.", s.xweatherClientId) { key -> set { it.copy(xweatherClientId = key) } }
                 }
                 item {
-                    SecureApiKeyField(
-                        title = "Xweather secret",
-                        description = "Paired with the Client ID above. Get both at data.portal.xweather.com/account/keys — namespace must be com.edgestream.tv.",
-                        savedValue = s.xweatherSecret,
-                        onSave = { key -> set { it.copy(xweatherSecret = key) } },
-                    )
+                    SecureApiKeyField("Xweather Secret", "Paired with the Client ID. Both are at data.portal.xweather.com/account/keys; the namespace must be com.edgestream.tv.", s.xweatherSecret) { key -> set { it.copy(xweatherSecret = key) } }
                 }
-                item {
-                    SecureApiKeyField(
-                        title = "Debrid service",
-                        description = "Your debrid cloud: cached films and episodes. Key: torbox.app → Settings → API.",
-                        savedValue = s.torboxApiKey,
-                        onSave = { key -> set { it.copy(torboxApiKey = key) } },
-                    )
-                }
-                item {
-                    Column(Modifier.glass(RoundedCornerShape(16.dp)).padding(18.dp)) {
-                        SectionTitle("Stream Add-ons")
-                        Text(
-                            "Add-ons that find debrid versions. One manifest URL per line.",
-                            style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 10.dp),
-                        )
-                        StreamAddonsCard(vm, s.streamAddons) { list -> set { st -> st.copy(streamAddons = list) } }
-                    }
-                }
-                item { SectionTitle("Free Channels") }
-                item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        EdgeButton("Add free channels for ${vm.countryCode ?: "my country"}", { vm.addFreeChannels(local = true) }, icon = Icons.Rounded.Add)
-                        EdgeButton("Add Free Channels", { vm.addFreeChannels(local = false) }, icon = Icons.Rounded.Add)
-                    }
-                }
-                item { Text("Free-to-air channels from the open iptv-org project.", style = MaterialTheme.typography.bodyMedium) }
-                item { Toggle("Fill in missing channel logos", "Uses the iptv-org public logo database", s.fillLogos) { set { it.copy(fillLogos = !it.fillLogos) } } }
             }
 
             SettingsPage.REMOTE -> {
                 item { PhoneRemoteCard() }
-                item {
-                    Cycle("User agent", s.userAgent.substringBefore(' '), "Some providers only accept certain players", icon = Icons.Rounded.Devices) {
-                        set { it.copy(userAgent = next(USER_AGENTS, it.userAgent)) }
-                    }
-                }
+                item { PanelSection("Transfer Setup") }
+                item { TransferSettings(vm) }
                 item {
                     Text(
                         "EdgeStream ${BuildConfigInfo.VERSION}  ·  Bring your own playlist: EdgeStream doesn't provide any channels or content.",
-                        style = MaterialTheme.typography.labelMedium, color = Edge.Faint, modifier = Modifier.padding(top = 24.dp, start = 4.dp),
+                        style = MaterialTheme.typography.labelMedium, color = Edge.Faint, modifier = Modifier.padding(top = 24.dp, start = 12.dp),
                     )
                 }
             }
@@ -582,99 +535,72 @@ private fun ThemePicker(current: String, onPick: (String) -> Unit) {
 
 private fun <T> next(options: List<T>, current: T): T = options[(options.indexOf(current) + 1).mod(options.size)]
 
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+/**
+ * One provider, TiviMate style: a single row (name, channel count); OK opens a dialog with
+ * everything you can do to it. Removing asks once more.
+ */
 @Composable
 private fun SourceCard(vm: AppViewModel, src: SourceEntity) {
-    var confirmDelete by remember { mutableStateOf(false) }
+    var menu by remember { mutableStateOf(false) }
+    var confirmRemove by remember { mutableStateOf(false) }
+    var editingGuide by remember { mutableStateOf(false) }
     var guideUrl by remember(src.id, src.epgUrl) { mutableStateOf(src.epgUrl) }
-    var guideSaving by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(16.dp)).padding(18.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Pill(if (src.type == SourceType.XTREAM) "Xtream" else "M3U", color = if (src.type == SourceType.XTREAM) Edge.Accent2 else Edge.Accent)
-            Text("  ${src.name}", style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-            if (src.isTrial) Pill("Trial", Modifier.padding(start = 8.dp), Edge.Gold)
+    val status = buildString {
+        append(if (src.type == SourceType.XTREAM) "Xtream" else "M3U playlist")
+        append(". ${src.channelCount} channels")
+        if (src.vodCount > 0) append(", ${src.vodCount} films and series")
+        append(". Updated ${Format.ago(src.lastRefresh)}.")
+        src.accountStatus?.let { append(" Account $it.") }
+        src.expiresAt?.let { append(if (it < System.currentTimeMillis()) " Expired ${Format.day(it)}." else " Expires ${Format.day(it)}.") }
+        src.maxConnections?.let { append(" ${src.activeConnections ?: 0} of $it connections in use.") }
+        src.lastError?.let { append(" Problem: $it") }
+        append(" Press OK for options.")
+    }
+    Column {
+        SettingRow(src.name, status, { menu = true }, icon = if (src.lastError != null) Icons.Rounded.ErrorOutline else Icons.Rounded.AccountCircle) {
+            RowValue(if (src.lastError != null) "Problem" else if (src.isTrial) "Trial" else "${src.channelCount} channels")
         }
-        Text(
-            buildString {
-                append("${src.channelCount} channels")
-                if (src.vodCount > 0) append(" · ${src.vodCount} movies & series")
-                append(" · playlist updated ${Format.ago(src.lastRefresh)}")
-                append(" · guide updated ${Format.ago(src.lastEpgRefresh)}")
-                if (src.lastEpgRefresh > 0) append(" · guide covers ${src.guideMatched} of ${src.channelCount} channels")
-            },
-            style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        val account = listOfNotNull(
-            src.accountStatus?.let { "Status: $it" },
-            src.expiresAt?.let { "Expires ${Format.day(it)}" + if (it < System.currentTimeMillis()) " (expired)" else "" },
-            src.maxConnections?.let { "Connections ${src.activeConnections ?: "?"}/$it" },
-        )
-        if (account.isNotEmpty()) Text(account.joinToString("  ·  "), style = MaterialTheme.typography.bodyMedium, color = Edge.Dim, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
-        src.lastError?.let { Text("Error: $it", style = MaterialTheme.typography.bodyMedium, color = Edge.Alert, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp)) }
-        Column(
-            Modifier.fillMaxWidth()
-                .padding(top = 12.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(Edge.Bg.copy(alpha = 0.55f))
-                .padding(12.dp),
-        ) {
-            Field(
-                label = "TV Guide URL",
-                value = guideUrl,
-                hint = "Leave blank for automatic guide finding",
-                supportingText = "An extra XMLTV guide, used after the checked and automatic guides for channels they don't cover.",
-                keyboard = KeyboardType.Uri,
-            ) { guideUrl = it }
-            if (guideUrl != src.epgUrl && !guideSaving) {
-                EdgeButton(
-                    "Save guide URL",
-                    {
-                        guideSaving = true
-                        vm.updateGuideUrl(src.id, guideUrl) { guideSaving = false }
-                    },
-                    Modifier.padding(top = 8.dp),
-                    primary = true,
-                    icon = Icons.Rounded.Sync,
-                )
+        if (editingGuide) Column(Modifier.padding(start = 56.dp, end = 12.dp, bottom = 8.dp)) {
+            Field(label = "Extra TV guide (XMLTV URL)", value = guideUrl, hint = "Leave blank for none",
+                supportingText = "Used for channels the other guides don't cover.", keyboard = KeyboardType.Uri) { guideUrl = it }
+            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                EdgeButton("Save", { vm.updateGuideUrl(src.id, guideUrl) { }; editingGuide = false }, primary = true, icon = Icons.Rounded.Check)
+                EdgeButton("Cancel", { guideUrl = src.epgUrl; editingGuide = false }, icon = Icons.Rounded.Close)
             }
         }
-        @OptIn(ExperimentalLayoutApi::class)
-        FlowRow(
-            Modifier.padding(top = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            EdgeButton("Refresh", { vm.refreshSource(src.id) }, icon = Icons.Rounded.Sync)
-            EdgeButton("Update Guide", { vm.refreshEpg(src.id) }, icon = Icons.Rounded.CalendarViewWeek)
-            if (src.type == SourceType.M3U) EdgeButton("Check Channels", { vm.checkStreams(src.id) }, icon = Icons.Rounded.Check)
-            EdgeButton(if (confirmDelete) "Press again to remove" else "Remove", {
-                if (confirmDelete) vm.deleteSource(src.id) else confirmDelete = true
-            }, icon = Icons.Rounded.Close)
-        }
     }
+    if (menu) com.edgestream.tv.ui.components.TvAlert(
+        title = src.name,
+        message = "${src.channelCount} channels · updated ${Format.ago(src.lastRefresh)}",
+        actions = listOfNotNull(
+            com.edgestream.tv.ui.components.AlertAction("Update Playlist") { menu = false; vm.refreshSource(src.id) },
+            com.edgestream.tv.ui.components.AlertAction("Update Guide") { menu = false; vm.refreshEpg(src.id) },
+            if (src.type == SourceType.M3U) com.edgestream.tv.ui.components.AlertAction("Check Channels") { menu = false; vm.checkStreams(src.id) } else null,
+            com.edgestream.tv.ui.components.AlertAction(if (src.epgUrl.isBlank()) "Add Extra Guide" else "Change Extra Guide") { menu = false; editingGuide = true },
+            com.edgestream.tv.ui.components.AlertAction("Remove Provider", destructive = true) { menu = false; confirmRemove = true },
+            com.edgestream.tv.ui.components.AlertAction("Cancel") { menu = false },
+        ),
+        onDismiss = { menu = false },
+    )
+    if (confirmRemove) com.edgestream.tv.ui.components.TvAlert(
+        title = "Remove ${src.name}?",
+        message = "Its channels, films, series and guide are removed from this TV. You can add it again later.",
+        actions = listOf(
+            com.edgestream.tv.ui.components.AlertAction("Cancel") { confirmRemove = false },
+            com.edgestream.tv.ui.components.AlertAction("Remove", destructive = true) { confirmRemove = false; vm.deleteSource(src.id) },
+        ),
+        onDismiss = { confirmRemove = false },
+    )
 }
 
 @Composable
 private fun Toggle(title: String, subtitle: String?, on: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector? = null, onClick: () -> Unit) {
-    SettingRow(title, subtitle, onClick, icon = icon) {
-        Box(
-            Modifier.size(46.dp, 26.dp).clip(RoundedCornerShape(50)).background(if (on) Edge.Accent else Edge.Line).padding(3.dp),
-            contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
-        ) { Box(Modifier.size(20.dp).clip(RoundedCornerShape(50)).background(if (on) Edge.OnAccent else Edge.Dim)) }
-    }
+    SettingRow(title, subtitle, onClick, icon = icon) { RowValue(if (on) "On" else "Off") }
 }
 
 @Composable
 private fun Cycle(title: String, value: String, subtitle: String? = null, icon: androidx.compose.ui.graphics.vector.ImageVector? = null, onClick: () -> Unit) {
-    SettingRow(title, subtitle, onClick, icon = icon) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.Icon(Icons.Rounded.ChevronLeft, null, Modifier.size(20.dp), tint = Edge.Accent)
-            Text(value, style = MaterialTheme.typography.labelLarge, color = Edge.Accent, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 4.dp).widthIn(max = 240.dp))
-            androidx.compose.material3.Icon(Icons.Rounded.ChevronRight, null, Modifier.size(20.dp), tint = Edge.Accent)
-        }
-    }
+    SettingRow(title, subtitle, onClick, icon = icon) { RowValue(value) }
 }
 
 @Composable
@@ -685,30 +611,24 @@ private fun SettingRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     trailing: @Composable () -> Unit,
 ) {
+    val report = LocalSettingHelp.current
     FocusSurface(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(if (subtitle != null) 76.dp else 60.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = Edge.Text.copy(alpha = 0.07f),
-        focusedColor = Edge.Text.copy(alpha = 0.16f),
-        focusScale = 1.015f,
+        modifier = Modifier.fillMaxWidth().height(56.dp).onFocusChanged { if (it.isFocused) report(StageItem(icon, title, subtitle)) },
+        shape = RoundedCornerShape(10.dp),
+        color = Color.Transparent,
+        focusedColor = Edge.Text,
+        focusScale = 1.03f,
         glow = false,
     ) { focused ->
-        Row(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+        val ink = if (focused) Edge.Bg else Edge.Text
+        Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             if (icon != null) {
-                Box(
-                    Modifier.size(34.dp).background(Edge.PanelHi, RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    androidx.compose.material3.Icon(icon, null, Modifier.size(19.dp), tint = if (focused) Edge.Accent else Edge.Accent.copy(alpha = 0.8f))
-                }
-                Spacer(Modifier.width(14.dp))
+                androidx.compose.material3.Icon(icon, null, Modifier.size(24.dp), tint = ink)
+                Spacer(Modifier.width(18.dp))
             }
-            Column(Modifier.weight(1f)) {
-                OneLine(title, style = MaterialTheme.typography.titleMedium, color = if (focused) Edge.Text else Edge.Text.copy(alpha = 0.92f))
-                subtitle?.let { OneLine(it, style = MaterialTheme.typography.bodyMedium, color = Edge.Dim) }
-            }
-            trailing()
+            OneLine(title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = ink)
+            androidx.compose.runtime.CompositionLocalProvider(LocalRowFocused provides focused) { trailing() }
         }
     }
 }
@@ -746,9 +666,9 @@ private fun WeatherPlacePicker(
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SettingRow("Weather Location", current, onClick = { if (manual) onAutomatic() }, icon = Icons.Rounded.Place) {
-            if (manual) Text("Use automatic", style = MaterialTheme.typography.labelLarge, color = Edge.Accent, maxLines = 1)
+            RowValue(if (manual) "Use automatic" else "Automatic")
         }
-        Column(Modifier.glass(RoundedCornerShape(12.dp)).padding(horizontal = 18.dp, vertical = 10.dp)) {
+        Column(Modifier.padding(horizontal = 12.dp)) {
             Field(
                 "Change location", query, "Start typing a town or city, e.g. Bris",
                 supportingText = when {
@@ -783,7 +703,7 @@ fun PhoneRemoteCard(compact: Boolean = false) {
     val connected = System.currentTimeMillis() - lastSeen < 120_000
 
     Row(
-        Modifier.fillMaxWidth().glass(RoundedCornerShape(14.dp)).padding(18.dp),
+        Modifier.fillMaxWidth().padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (url != null && running) com.edgestream.tv.ui.components.QrCode(url, Modifier.size(if (compact) 132.dp else 156.dp).clip(RoundedCornerShape(8.dp)))
@@ -1150,61 +1070,26 @@ private fun SecureApiKeyField(
 ) {
     var draft by remember(savedValue) { mutableStateOf(savedValue) }
     var notice by remember(savedValue) { mutableStateOf<String?>(null) }
-    Column(Modifier.glass(RoundedCornerShape(16.dp)).padding(18.dp)) {
-        SectionTitle(title)
-        Text(
-            description,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(bottom = 6.dp),
-        )
-        Field(
-            label = "API key",
-            value = draft,
-            hint = "Paste your key",
-            password = true,
-            supportingText = "Encrypted with the Android Keystore before it is stored.",
-        ) { draft = it }
-
-        Row(
-            Modifier.fillMaxWidth().padding(top = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (draft != savedValue) {
-                EdgeButton(
-                    "Save securely",
-                    {
+    var open by remember { mutableStateOf(false) }
+    Column {
+        SettingRow(title, description, { open = !open }, icon = Icons.Rounded.VpnKey) {
+            RowValue(notice ?: if (savedValue.isBlank()) "Not set" else "Saved")
+        }
+        if (open) Column(Modifier.padding(start = 56.dp, end = 12.dp, bottom = 8.dp)) {
+            Field(label = "Key", value = draft, hint = "Paste your key", password = true,
+                supportingText = "Stored encrypted on this TV.") { draft = it }
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (draft != savedValue) {
+                    EdgeButton("Save", {
                         val value = draft.trim()
                         onSave(value)
-                        notice = if (value.isEmpty()) "Key removed and saved securely" else "Saved securely"
-                    },
-                    primary = true,
-                    icon = Icons.Rounded.Check,
-                )
-                EdgeButton(
-                    "Revert",
-                    { draft = savedValue; notice = null },
-                    icon = Icons.Rounded.Close,
-                )
-            } else if (savedValue.isNotBlank()) {
-                EdgeButton(
-                    "Remove key",
-                    {
-                        onSave("")
-                        notice = "Removed and saved securely"
-                    },
-                    icon = Icons.Rounded.Delete,
-                )
-            }
-            notice?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Edge.Accent2,
-                    maxLines = 2,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
+                        notice = if (value.isEmpty()) "Removed" else "Saved"
+                        open = false
+                    }, primary = true, icon = Icons.Rounded.Check)
+                    EdgeButton("Cancel", { draft = savedValue; open = false }, icon = Icons.Rounded.Close)
+                } else if (savedValue.isNotBlank()) {
+                    EdgeButton("Remove Key", { onSave(""); notice = "Removed"; open = false }, icon = Icons.Rounded.Delete)
+                }
             }
         }
     }
@@ -1222,13 +1107,10 @@ private fun StreamAddonsCard(vm: AppViewModel, stored: String, save: (String) ->
     var status by remember { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    Column(Modifier.glass(RoundedCornerShape(12.dp)).padding(horizontal = 18.dp, vertical = 12.dp)) {
-        Text("STREAM ADDONS (DEBRID VERSIONS)", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp, bottom = 4.dp))
+    Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
         Text(
-            "Films and episodes play from debrid first, using the addons below, and fall back to your provider. " +
-                "Set up AIOStreams, Comet or MediaFusion with your debrid key on its website, then paste its manifest URL here " +
-                "(the phone remote can type it for you).",
-            style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+            "Stream add-ons find debrid copies of films and episodes. Set one up (AIOStreams, Comet or MediaFusion) with your debrid key, then paste its manifest URL.",
+            style = MaterialTheme.typography.bodyMedium, color = Edge.Dim, modifier = Modifier.padding(bottom = 6.dp),
         )
         urls.forEachIndexed { i, url ->
             Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {

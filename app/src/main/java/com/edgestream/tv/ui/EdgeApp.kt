@@ -395,9 +395,13 @@ fun EdgeApp(vm: AppViewModel = viewModel()) {
         if (textEntry.focused && !fullscreen && !onboarding) PhoneTypeHint(Modifier.align(Alignment.TopEnd))
         if (!fullscreen) versionSheet?.let { com.edgestream.tv.ui.screens.VersionsSheet(vm, it) }
         // Never over full-screen video: sync progress waits until you leave the picture.
-        if (!fullscreen) SyncToast(vm, Modifier.align(Alignment.BottomEnd).padding(end = 42.dp, bottom = 96.dp))
         StartingScreen(vm)
-        NoticeToast(vm, Modifier.align(Alignment.BottomCenter).padding(bottom = 140.dp))
+        // Banners stack at the top right: a notice first, sync progress under it.
+        Column(Modifier.align(Alignment.TopEnd).padding(top = 24.dp, end = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            NoticeToast(vm, Modifier)
+            // Never over full-screen video: sync progress waits until you leave the picture.
+            if (!fullscreen) SyncToast(vm, Modifier)
+        }
         ReminderPopup(vm)
         AlarmPopup(vm)
         if (choosingProfile && !fullscreen) com.edgestream.tv.ui.screens.WhoIsWatching { profileChosen = true }
@@ -442,22 +446,38 @@ private fun SyncToast(vm: AppViewModel, modifier: Modifier) {
     androidx.compose.runtime.LaunchedEffect(status) {
         if (!status.running && status.message.isNotEmpty()) { kotlinx.coroutines.delay(6_000); dismissed = true }
     }
-    AnimatedVisibility(status.message.isNotEmpty() && !dismissed, modifier, enter = fadeIn(), exit = fadeOut()) {
-        Row(
-            Modifier.shadow(20.dp, RoundedCornerShape(50), clip = false)
-                .glass(RoundedCornerShape(50), Edge.Glass).padding(horizontal = 18.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    var last by remember { mutableStateOf("") }
+    if (status.message.isNotEmpty()) last = status.message
+    Banner(status.message.isNotEmpty() && !dismissed, if (status.running) "Updating" else "Up to date", last, working = status.running, modifier = modifier)
+}
+
+/**
+ * The one notification style (tvOS banner): slides in at the top right with the EdgeStream mark,
+ * a short title and one line of detail; work in progress gets a thin running line underneath.
+ */
+@Composable
+private fun Banner(visible: Boolean, title: String, detail: String, working: Boolean = false, modifier: Modifier = Modifier) {
+    AnimatedVisibility(
+        visible, modifier,
+        enter = androidx.compose.animation.slideInHorizontally { it / 2 } + fadeIn(),
+        exit = androidx.compose.animation.slideOutHorizontally { it / 2 } + fadeOut(),
+    ) {
+        Column(
+            Modifier.width(420.dp).shadow(24.dp, RoundedCornerShape(18.dp), clip = false)
+                .glass(RoundedCornerShape(18.dp), Edge.Solid.copy(alpha = 0.92f)),
         ) {
-            if (status.running) {
-                val pulse by androidx.compose.animation.core.rememberInfiniteTransition(label = "sync").animateFloat(
-                    0.35f, 1f, androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(800), androidx.compose.animation.core.RepeatMode.Reverse), label = "pulse",
-                )
-                Box(Modifier.size(8.dp).graphicsLayer { alpha = pulse }.shadow(6.dp, RoundedCornerShape(50), clip = false, ambientColor = Edge.Accent, spotColor = Edge.Accent).clip(RoundedCornerShape(50)).background(Edge.Accent))
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(Edge.Accent), contentAlignment = Alignment.Center) {
+                    com.edgestream.tv.ui.components.EdgeMark(Modifier.size(24.dp))
+                }
+                Column(Modifier.padding(start = 14.dp)) {
+                    Text(title, style = MaterialTheme.typography.titleSmall, color = Edge.Text, maxLines = 1)
+                    Text(detail, style = MaterialTheme.typography.bodyMedium, color = Edge.Text.copy(alpha = 0.72f),
+                        maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
             }
-            Text(
-                "  ${status.message}", style = MaterialTheme.typography.labelMedium, color = Edge.Text,
-                maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 560.dp),
+            if (working) androidx.compose.material3.LinearProgressIndicator(
+                Modifier.fillMaxWidth().height(3.dp), color = Edge.Accent, trackColor = Color.Transparent,
             )
         }
     }
@@ -540,28 +560,9 @@ private fun StartingScreen(vm: AppViewModel) {
 @Composable
 private fun NoticeToast(vm: AppViewModel, modifier: Modifier) {
     val notice by vm.notice.collectAsStateWithLifecycle()
-    val status by vm.status.collectAsStateWithLifecycle()
     var last by remember { mutableStateOf("") }
     notice?.let { last = it }
-    // Rises above the sync toast so the two never collide.
-    AnimatedVisibility(
-        notice != null,
-        modifier.then(if (status.message.isNotEmpty()) Modifier.padding(bottom = 40.dp) else Modifier),
-        enter = fadeIn(), exit = fadeOut(),
-    ) {
-        Row(
-            Modifier.shadow(20.dp, RoundedCornerShape(50), clip = false)
-                .glass(RoundedCornerShape(50), Edge.Smoke).padding(horizontal = 22.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.NotificationsActive, null, Modifier.size(18.dp), tint = Edge.Gold)
-            Text(
-                "  $last", style = MaterialTheme.typography.labelLarge, color = Edge.Text,
-                maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 560.dp),
-            )
-        }
-    }
+    Banner(notice != null, "EdgeStream", last, modifier = modifier)
 }
 
 /**

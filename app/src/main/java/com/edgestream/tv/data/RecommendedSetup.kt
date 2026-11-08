@@ -25,7 +25,6 @@ object RecommendedSetup {
                 hideOffline = true,
                 radarSatellite = false,
                 epgRefreshHours = 12,
-                autoGuides = true,
                 startScreen = "HOME",
             )
         }

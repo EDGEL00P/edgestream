@@ -65,8 +65,6 @@ data class AppSettings(
     val groupSort: String = "az",
     /** "number", "az", "quality" or "watched". */
     val channelSort: String = "number",
-    /** Add free public guides (epg.pw, epgshare01, i.mjh.nz) for channels the provider's guide misses. */
-    val autoGuides: Boolean = true,
     /** Hide channels a stream check found offline. */
     val hideOffline: Boolean = true,
     /** Switch the TV's refresh rate to the video's (24/25/50/60 fps): no judder, brief blank on change. */
@@ -143,7 +141,6 @@ class Settings(context: Context) {
         nameRegex = Secrets.openOrBlank(prefs.getString("nameRegex", "") ?: ""),
         groupSort = prefs.getString("groupSort", "az") ?: "",
         channelSort = prefs.getString("channelSort", "number") ?: "",
-        autoGuides = prefs.getBoolean("autoGuides", true),
         hideOffline = prefs.getBoolean("hideOffline", true),
         matchFrameRate = prefs.getBoolean("matchFps", false),
         tunneling = prefs.getBoolean("tunneling", false),
@@ -198,7 +195,6 @@ class Settings(context: Context) {
             .putString("nameRegex", Secrets.seal(s.nameRegex))
             .putString("groupSort", s.groupSort)
             .putString("channelSort", s.channelSort)
-            .putBoolean("autoGuides", s.autoGuides)
             .putBoolean("hideOffline", s.hideOffline)
             .putBoolean("matchFps", s.matchFrameRate)
             .putBoolean("tunneling", s.tunneling)

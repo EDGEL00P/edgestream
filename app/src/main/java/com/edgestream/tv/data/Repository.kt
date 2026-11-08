@@ -235,26 +235,6 @@ class Repository(
         _status.value = if (message == null) SyncStatus() else SyncStatus(running = !done, message = message)
     }
 
-    private fun isoCountry(cc: String) = if (cc == "UK") "GB" else cc
-
-    /**
-     * Countries the channels come from, most channels first, read from the name prefix ("UK| BBC 1")
-     * and the tvg-id suffix ("bbc1.uk"). With English-only on, limited to English-speaking ones.
-     */
-    private fun channelCountries(channels: List<ChannelEntity>): List<String> {
-        val counts = HashMap<String, Int>()
-        channels.forEach { c ->
-            val cc = EpgMatcher.countryOf(c.name) ?: c.tvgId?.let { EpgMatcher.countryOf(it) }
-            if (cc != null) counts.merge(isoCountry(cc.uppercase()), 1, Int::plus)
-        }
-        val english = setOf("US", "GB", "CA", "AU", "NZ", "IE")
-        return counts.entries.asSequence()
-            .filter { !settings.value.englishOnly || it.key in english }
-            .filter { it.value >= 5 }
-            .sortedByDescending { it.value }
-            .map { it.key }.take(6).toList()
-    }
-
     /**
      * Swaps in a freshly downloaded lineup without losing guide links: each channel keeps the
      * guide channel it was resolved to last time (matched by its stable key), so the guide stays
@@ -597,50 +577,30 @@ class Repository(
     // ---- guide -----------------------------------------------------------------------------
 
     private suspend fun refreshEpgLocked(source: SourceEntity) {
-        // The provider's own guide is kept as a fallback, not the first word: its tvg-ids are
-        // frequently copied from other channels (AHC tagged as AMC). Public guides carry clean
-        // display names, so they resolve the channel by name first; the provider guide then only
-        // fills whatever they could not.
+        // Two guides only: EdgeStream's merged guide first, then the provider's own (plus any extra
+        // URL the viewer added). The provider's tvg-ids are often copied from other channels (AHC
+        // tagged as AMC), so it only fills what the merged guide could not.
         val providerGuide = when (source.type) {
             SourceType.XTREAM -> listOf(XtreamApi(source.url, Secrets.open(source.username), Secrets.open(source.password)).xmltvUrl())
             else -> source.headerEpgUrls.split(',')
         }
         val explicit = (providerGuide + source.epgUrl.split(','))
             .map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-        // Free public guides fill whatever the provider's own guide doesn't cover: one set for the
-        // viewer's country, then one for each country the channels themselves come from (a UK
-        // channel needs a UK guide no matter where the TV is).
         val channels = languageFiltered(db.channels().forSource(source.id))
-        // One merged guide, rebuilt on GitHub from every public guide this lineup uses, replaces
-        // the ~30 per-guide downloads (15-20 min on a SHIELD). If it can't be reached, the
-        // per-guide path below runs exactly as before.
-        val merged = settings.value.autoGuides && mergedGuideAvailable()
-        val auto = if (!settings.value.autoGuides || merged) emptyList() else {
-            val loc = runCatching { PublicApis.location() }.getOrNull()
-            val home = PublicApis.countryFromUrl(source.url) ?: loc?.countryCode
-            val fromChannels = channelCountries(channels)
-            // Australian guides are per state; only fetch the states these channels belong to.
-            val regions = channels.mapNotNull { EpgMatcher.regionOf(it.name, it.tvgId ?: it.epgId) }.toSet()
-            (listOfNotNull(home?.uppercase()?.let(::isoCountry)) + fromChannels).distinct()
-                .flatMap { cc -> PublicApis.freeGuides(cc, if (cc == home?.uppercase()) loc?.city else null, regions) }
-                .distinctBy { it.url }
-        }
-        // Channels in the prebuilt map go straight to their checked guide; only the guides that
-        // map actually needs for this source are downloaded.
+        // The merged guide is rebuilt on GitHub every 6 h from the public guides this lineup uses
+        // (one download instead of ~30). Unreachable this time: the provider guide covers alone.
+        val merged = mergedGuideAvailable()
+        // Channels in the prebuilt map go straight to their id in the merged guide.
         val byId = channels.associateBy { it.id }
         fun channelCountry(c: ChannelEntity) = EpgMatcher.countryOf(c.name) ?: EpgMatcher.countryOf(c.tvgId)
         val premapped = HashMap<String, MutableMap<Long, String>>()
         channels.forEach { c ->
             (epgMap.lookup(c.name, channelCountry(c)) ?: ChannelIdentities.current?.get(c.identity)?.takeIf { it.feed == null }?.let { epgMap.lookup(it.name, it.country.lowercase()) })
-                ?.let { (url, id) -> premapped.getOrPut(if (merged) MERGED_GUIDE else url) { HashMap() }[c.id] = id }
+                ?.let { (_, id) -> if (merged) premapped.getOrPut(MERGED_GUIDE) { HashMap() }[c.id] = id }
         }
         // The merged file keeps every source guide's own ids and names, so mapped and
         // name-matched channels both resolve against it unchanged.
-        val mapped = if (merged) listOf(PublicApis.Guide(MERGED_GUIDE))
-            else epgMap.guides.filter { it in premapped }.map { PublicApis.Guide(it) }
-        // Checked name mappings, then the clean public guides (name-first matching), then the
-        // provider's own guide as the fallback for channels nothing else knows.
-        val guides = (mapped + auto + explicit.map { PublicApis.Guide(it) }).distinctBy { it.url }
+        val guides = (listOfNotNull(if (merged) PublicApis.Guide(MERGED_GUIDE) else null) + explicit.map { PublicApis.Guide(it) }).distinctBy { it.url }
         val urls = guides.map { it.url }
         if (urls.isEmpty()) return
 

@@ -69,13 +69,14 @@ fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, modifier: Mod
     val minute = clock / 60_000
     val cal = remember(minute) { Calendar.getInstance().apply { timeInMillis = clock } }
     Column(modifier) {
-        // Top row: clock left, voice right. Scores live in the hero and the ticker, nowhere else.
+        // Top right, tvOS style: the clock with voice beside it. The game hero owns the left.
         val events by vm.calendarEvents.collectAsStateWithLifecycle()
         val day = cal.get(Calendar.DAY_OF_YEAR)
         val upNext = remember(events, day) { com.edgestream.tv.data.upcoming(events, java.time.LocalDate.now(), days = 14, limit = 3) }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-            TimeTile(clock, settings.use24h, weather, settings.fahrenheit, upNext, Modifier.weight(1f))
-            VoiceButton(vm, Modifier.padding(start = 12.dp, top = 6.dp))
+            Spacer(Modifier.weight(1f))
+            TimeTile(clock, settings.use24h, weather, settings.fahrenheit, upNext, Modifier)
+            VoiceButton(vm, Modifier.padding(start = 14.dp, top = 8.dp))
         }
         val preview by vm.preview.collectAsStateWithLifecycle()
         if (spotlight is BandItem.Game) GameSpot(spotlight.game, settings.use24h, preview?.name, Modifier.weight(1f).fillMaxWidth())
@@ -128,7 +129,7 @@ private fun temp(c: Double, f: Boolean) = if (c.isNaN()) "–" else if (f) "${(c
 @Composable
 private fun TimeTile(clock: Long, use24h: Boolean, w: PublicApis.WeatherDetail?, f: Boolean, upNext: List<Pair<java.time.LocalDate, com.edgestream.tv.data.CalendarEvent>>, modifier: Modifier) {
     val minute = clock / 60_000
-    Column(modifier.padding(horizontal = 2.dp, vertical = 2.dp)) {
+    Column(modifier.padding(horizontal = 2.dp, vertical = 2.dp), horizontalAlignment = Alignment.End) {
         Text(remember(minute, use24h) { Format.time(clock, use24h) }, color = Edge.Text, fontSize = 54.sp, lineHeight = 54.sp, fontFamily = ClockFont, fontWeight = FontWeight.Black)
         Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(

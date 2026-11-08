@@ -95,45 +95,8 @@ object PublicApis {
         }
     }
 
-    /**
-     * Free XMLTV guides for a country, best first. epg.pw and epgshare01 cover most countries;
-     * i.mjh.nz has excellent Australian and New Zealand data. Missing files are skipped.
-     */
-
     /** A guide file and, for city-specific guides, the state/territory its times belong to. */
     data class Guide(val url: String, val region: String? = null)
-
-    private val AU_CITIES = listOf(
-        "Sydney" to "NSW", "Melbourne" to "VIC", "Brisbane" to "QLD", "Perth" to "WA",
-        "Adelaide" to "SA", "Hobart" to "TAS", "Darwin" to "NT", "Canberra" to "ACT",
-    )
-
-    /**
-     * Free guides for a country. In Australia every capital gets its own i.mjh.nz guide (regional
-     * schedules and time zones differ); the viewer's own city goes first so channels without a
-     * region in their name follow local times. Only states carried by the channels are fetched.
-     */
-    fun freeGuides(countryCode: String, city: String? = null, regions: Set<String> = emptySet()): List<Guide> {
-        val cc = countryCode.uppercase()
-        return buildList {
-            when (cc) {
-                "AU" -> {
-                    val home = AU_CITIES.firstOrNull { it.first.equals(city, ignoreCase = true) } ?: AU_CITIES.first()
-                    add(Guide("https://i.mjh.nz/au/${home.first}/epg.xml.gz", home.second))
-                    (AU_CITIES - home)
-                        .filter { it.second in regions }
-                        .forEach { (c, region) -> add(Guide("https://i.mjh.nz/au/$c/epg.xml.gz", region)) }
-                }
-                "NZ" -> add(Guide("https://i.mjh.nz/nz/epg.xml.gz"))
-            }
-            if (cc == "GB") {
-                add(Guide("https://raw.githubusercontent.com/tv1973/xmltv_uk/refs/heads/master/epg.xml"))
-                add(Guide("https://raw.githubusercontent.com/farleyflex/epg-guide/refs/heads/main/epg.xml"))
-            }
-            add(Guide("https://epg.pw/xmltv/epg_$cc.xml.gz"))
-            add(Guide("https://epgshare01.online/epgshare01/epg_ripper_${if (cc == "GB") "UK" else cc}1.xml.gz"))
-        }
-    }
 
     /** Country from an iptv-org style URL: …/countries/au.m3u -> "AU". */
     fun countryFromUrl(url: String): String? =
