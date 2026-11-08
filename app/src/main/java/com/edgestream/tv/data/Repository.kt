@@ -611,8 +611,6 @@ class Repository(
             val regions = channels.mapNotNull { EpgMatcher.regionOf(it.name, it.tvgId ?: it.epgId) }.toSet()
             (listOfNotNull(home?.uppercase()?.let(::isoCountry)) + fromChannels).distinct()
                 .flatMap { cc -> PublicApis.freeGuides(cc, if (cc == home?.uppercase()) loc?.city else null, regions) }
-                // Matt Huisman's service guides (FAST, Foxtel, Kayo, Sky, Singtel), once per refresh.
-                .plus(PublicApis.MJH_SERVICE_GUIDES.map { PublicApis.Guide(it) })
                 .distinctBy { it.url }
         }
         // Channels in the prebuilt map go straight to their checked guide; only the guides that
@@ -742,7 +740,7 @@ class Repository(
                 // Debug builds: what each guide actually contributes, to decide which are worth fetching.
                 if (Sports.traceOn) android.util.Log.d(
                     "EdgeEpg",
-                    "${url.substringAfter("://").take(90)}: +${resolved.size - filledBefore} channels, ${rows.size} programmes, ${(System.nanoTime() - began) / 1_000_000} ms",
+                    "${Http.redact(url).substringAfter("://").take(90)}: +${resolved.size - filledBefore} channels, ${rows.size} programmes, ${(System.nanoTime() - began) / 1_000_000} ms",
                 )
                 // Publish this guide's matches now, so channels light up as each file finishes.
                 if (epgUpdates.isNotEmpty()) { db.channels().setEpgIds(epgUpdates.toList()); epgUpdates.clear() }

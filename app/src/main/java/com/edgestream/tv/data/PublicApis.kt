@@ -99,14 +99,6 @@ object PublicApis {
      * Free XMLTV guides for a country, best first. epg.pw and epgshare01 cover most countries;
      * i.mjh.nz has excellent Australian and New Zealand data. Missing files are skipped.
      */
-    private const val MJH = "https://raw.githubusercontent.com/matthuisman/i.mjh.nz/refs/heads/master"
-
-    /**
-     * Matt Huisman's service guides (gzipped), added to every refresh: the combined FAST guide
-     * plus the sports services this lineup carries. None overlaps the per-country files, and a
-     * guide only fills channels it actually matches by name/id.
-     */
-    val MJH_SERVICE_GUIDES = listOf("all", "Foxtel", "Kayo", "SkySportNow", "Singtel", "SkyGo").map { "$MJH/$it/epg.xml.gz" }
 
     /** A guide file and, for city-specific guides, the state/territory its times belong to. */
     data class Guide(val url: String, val region: String? = null)
@@ -126,9 +118,6 @@ object PublicApis {
         return buildList {
             when (cc) {
                 "AU" -> {
-                    // The complete AU/AFL/A-League/NRL guide. City guides remain the fallback
-                    // for channels this file does not cover.
-                    add(Guide("https://raw.githubusercontent.com/matthuisman/i.mjh.nz/refs/heads/master/au/all/epg.xml"))
                     val home = AU_CITIES.firstOrNull { it.first.equals(city, ignoreCase = true) } ?: AU_CITIES.first()
                     add(Guide("https://i.mjh.nz/au/${home.first}/epg.xml.gz", home.second))
                     (AU_CITIES - home)
