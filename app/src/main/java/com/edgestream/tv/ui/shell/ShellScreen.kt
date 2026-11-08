@@ -186,8 +186,17 @@ fun ShellScreen(
                     delay(150)
                 }
             }
+            // The section rises out of the dock: a short zoom-and-fade from the bottom edge.
+            val rise = remember(state.tile) { androidx.compose.animation.core.Animatable(if (com.edgestream.tv.ui.DeviceTier.tier == com.edgestream.tv.ui.DeviceTier.Tier.LOW) 1f else 0f) }
+            LaunchedEffect(state.tile) { rise.animateTo(1f, androidx.compose.animation.core.tween(420, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
             Box(
-                Modifier.fillMaxSize().padding(SECTION_PAD).graphicsLayer().focusRequester(sectionFocus)
+                Modifier.fillMaxSize().padding(SECTION_PAD).graphicsLayer {
+                    val k = rise.value
+                    alpha = k
+                    scaleX = 0.94f + 0.06f * k; scaleY = 0.94f + 0.06f * k
+                    translationY = (1f - k) * 48.dp.toPx()
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
+                }.focusRequester(sectionFocus)
                     .onFocusChanged { childFocused = it.hasFocus && !it.isFocused }
                     .focusGroup(),
             ) { hosted() }

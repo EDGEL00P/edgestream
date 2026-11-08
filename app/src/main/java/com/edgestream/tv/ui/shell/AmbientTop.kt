@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.text.withStyle
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -64,13 +66,42 @@ fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, modifier: Mod
     val weather by vm.weatherDetail.collectAsStateWithLifecycle()
     val minute = clock / 60_000
     val cal = remember(minute) { Calendar.getInstance().apply { timeInMillis = clock } }
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+    val games by vm.sportsGames.collectAsStateWithLifecycle()
+    val nfl by vm.nflBoard.collectAsStateWithLifecycle()
+    val alert by vm.weatherAlert.collectAsStateWithLifecycle()
+    val briefing = remember(games, nfl, weather?.tempC, alert, minute) {
+        com.edgestream.tv.data.Briefing.compose(
+            games, nfl?.picks.orEmpty(), weather?.tempC?.takeIf { !it.isNaN() }, weather?.city, alert?.title,
+            timeOf = { Format.time(it, settings.use24h) }, now = clock,
+        )
+    }
+    Column(modifier) {
+    if (briefing.isNotEmpty()) BriefingLine(briefing, Modifier.fillMaxWidth().padding(start = 4.dp, bottom = 10.dp))
+    Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         val events by vm.calendarEvents.collectAsStateWithLifecycle()
         val day = cal.get(Calendar.DAY_OF_YEAR)
         val upNext = remember(events, day) { com.edgestream.tv.data.upcoming(events, java.time.LocalDate.now(), days = 14, limit = 3) }
         TimeTile(clock, settings.use24h, weather, settings.fahrenheit, upNext, Modifier.width(196.dp).fillMaxHeight())
         if (spotlight is BandItem.Game) GameSpot(spotlight.game, settings.use24h, Modifier.weight(1f).fillMaxHeight())
         else Spotlight(spotlight, tile, settings.use24h, Modifier.weight(1f).fillMaxHeight())
+    }
+    }
+}
+
+/** The briefing: one live sentence, key words in the theme accent, behind an accent edge. */
+@Composable
+private fun BriefingLine(parts: List<com.edgestream.tv.data.Briefing.Part>, modifier: Modifier) {
+    val accent = Edge.Accent
+    val text = androidx.compose.ui.text.buildAnnotatedString {
+        parts.forEach { p ->
+            if (p.key) withStyle(androidx.compose.ui.text.SpanStyle(color = accent, fontWeight = FontWeight.Bold)) { append(p.text) }
+            else append(p.text)
+        }
+    }
+    Row(modifier.height(IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.width(3.dp).fillMaxHeight().background(accent))
+        Text("BRIEFING", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, modifier = Modifier.padding(horizontal = 12.dp))
+        Text(text, color = Edge.Text, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -211,9 +242,9 @@ private fun GameSpot(g: Sports.Game, use24h: Boolean, modifier: Modifier) {
                         style = MaterialTheme.typography.titleLarge, color = Edge.Text,
                     )
                 } else {
-                    Text("${g.away.abbr} ${g.away.score ?: "0"}", style = MaterialTheme.typography.displaySmall)
+                    com.edgestream.tv.ui.components.RollingText("${g.away.abbr} ${g.away.score ?: "0"}", MaterialTheme.typography.displaySmall)
                     Text(if (g.state == Sports.State.FINAL) "FINAL" else g.detail, color = Dim, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    Text("${g.home.score ?: "0"} ${g.home.abbr}", style = MaterialTheme.typography.displaySmall)
+                    com.edgestream.tv.ui.components.RollingText("${g.home.score ?: "0"} ${g.home.abbr}", MaterialTheme.typography.displaySmall)
                 }
             }
             if (homeChance != null && source != null) {

@@ -166,9 +166,9 @@ private fun MatchupPane(pick: NflPicks.Pick, board: NflPicks.Board, use24h: Bool
             Column {
                 Text("PICK", style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp), color = Edge.Faint)
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Text(pick.winner, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+                    com.edgestream.tv.ui.components.RollingText(pick.winner, MaterialTheme.typography.displaySmall)
                     Spacer(Modifier.width(10.dp))
-                    Text(pct(pick.winProb), style = MaterialTheme.typography.headlineSmall, color = Edge.Accent, fontWeight = FontWeight.Bold)
+                    com.edgestream.tv.ui.components.RollingText(pct(pick.winProb), MaterialTheme.typography.headlineSmall, color = Edge.Accent)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     pick.tier?.let { Pill(it.label.uppercase(), color = Edge.Accent) }
