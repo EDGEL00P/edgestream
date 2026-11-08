@@ -3,6 +3,8 @@ package com.edgestream.tv.ui.glass
 import android.view.TextureView
 import androidx.annotation.OptIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -73,8 +75,10 @@ fun LivePreview(url: String, onFailed: () -> Unit, modifier: Modifier = Modifier
         player.playWhenReady = true
         onStopOrDispose { player.stop() }
     }
+    var surface by remember(player) { androidx.compose.runtime.mutableStateOf<TextureView?>(null) }
+    SampleForGlass(surface, 1.12f)
     AndroidView(
-        factory = { c -> TextureView(c).also { player.setVideoTextureView(it) } },
+        factory = { c -> TextureView(c).also { player.setVideoTextureView(it); surface = it } },
         // Slightly larger than the screen, like the highlight reel: fills overscan, crops corner bugs.
         modifier = modifier.graphicsLayer { scaleX = 1.12f; scaleY = 1.12f },
     )

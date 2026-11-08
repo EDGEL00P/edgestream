@@ -8,6 +8,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.runtime.remember
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -289,9 +293,55 @@ object EdgeLayout {
     val ScreenHeaderGap = 24.dp
 }
 
-/** A card or chip surface: one flat fill, the same everywhere (no sheen, no gradient). */
-fun Modifier.glass(shape: Shape, fill: Color = Edge.Panel): Modifier =
-    this.clip(shape).background(fill)
+/**
+ * Frosted glass: the panel shows a heavily blurred, colour-boosted slice of the live background
+ * behind it ([com.edgestream.tv.ui.glass.LiveBlur]), darkened a touch for legible text, tinted with
+ * [fill], with a faint lit top edge. Without a blurred background (dialogs, full-screen video,
+ * low-tier devices) it is the plain [fill].
+ */
+fun Modifier.glass(shape: Shape, fill: Color = Edge.Panel): Modifier = composed {
+    val view = androidx.compose.ui.platform.LocalView.current
+    val origin = remember { floatArrayOf(0f, 0f) }
+    val inMainWindow = view.rootView === com.edgestream.tv.ui.components.FocusBeam.hostRoot
+    this.clip(shape)
+        .onGloballyPositioned { c -> c.positionInRoot().let { origin[0] = it.x; origin[1] = it.y } }
+        .drawBehind {
+            val frame = com.edgestream.tv.ui.glass.LiveBlur.frame
+            val rootW = view.rootView.width.toFloat()
+            val rootH = view.rootView.height.toFloat()
+            if (frame == null || !inMainWindow || rootW <= 0f || rootH <= 0f) {
+                drawRect(fill); return@drawBehind
+            }
+            // Screen point -> background point: the background may be drawn scaled about the centre.
+            val k = com.edgestream.tv.ui.glass.LiveBlur.sourceScale
+            fun mapX(x: Float) = (0.5f + (x / rootW - 0.5f) / k) * frame.width
+            fun mapY(y: Float) = (0.5f + (y / rootH - 0.5f) / k) * frame.height
+            val l = mapX(origin[0]).coerceIn(0f, frame.width - 1f)
+            val t = mapY(origin[1]).coerceIn(0f, frame.height - 1f)
+            val r = mapX(origin[0] + size.width).coerceIn(l + 1f, frame.width.toFloat())
+            val b = mapY(origin[1] + size.height).coerceIn(t + 1f, frame.height.toFloat())
+            drawImage(
+                frame,
+                srcOffset = androidx.compose.ui.unit.IntOffset(l.toInt(), t.toInt()),
+                srcSize = androidx.compose.ui.unit.IntSize((r - l).toInt().coerceAtLeast(1), (b - t).toInt().coerceAtLeast(1)),
+                dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt()),
+                filterQuality = androidx.compose.ui.graphics.FilterQuality.Low,
+                colorFilter = GLASS_SATURATION,
+            )
+            drawRect(Color.Black.copy(alpha = 0.40f))
+            drawRect(fill)
+            drawRect(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.10f), Color.Transparent), endY = size.height * 0.5f))
+            drawLine(
+                Brush.horizontalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.30f), Color.Transparent)),
+                Offset(0f, 0.75f), Offset(size.width, 0.75f), strokeWidth = 1.5f,
+            )
+        }
+}
+
+/** Glass lifts the colour behind it, like the system blur on newer Android. */
+private val GLASS_SATURATION = androidx.compose.ui.graphics.ColorFilter.colorMatrix(
+    androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(1.4f) },
+)
 
 /**
  * The room the glass sits in: the palette's background with two faint, fixed pools of accent

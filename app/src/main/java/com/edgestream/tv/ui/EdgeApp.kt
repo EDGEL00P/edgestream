@@ -278,6 +278,7 @@ fun EdgeApp(vm: AppViewModel = viewModel()) {
         } else if (!fullscreen && backdrop != null && !com.edgestream.tv.PressMode.on) {
             // Real photos, each with a slow documentary move, cross-fading to the next. The move is
             // read only in the draw phase (graphicsLayer), so nothing recomposes per frame.
+            LaunchedEffect(backdrop) { backdrop?.let { if (com.edgestream.tv.ui.glass.LiveBlur.enabled) com.edgestream.tv.ui.glass.LiveBlur.publishStill(it.sharp) } }
             androidx.compose.animation.Crossfade(backdrop, animationSpec = androidx.compose.animation.core.tween(2_000), label = "backdrop") { b ->
                 if (b != null) androidx.compose.foundation.Image(
                     b.sharp, null,

@@ -3,6 +3,8 @@ package com.edgestream.tv.ui.glass
 import android.view.TextureView
 import androidx.annotation.OptIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -78,10 +80,12 @@ fun VideoBackdrop(
         onStopOrDispose { player.stop() }
     }
     // A new reel list rebuilds the player; a fresh view per player re-attaches the picture.
+    var surface by androidx.compose.runtime.remember(player) { androidx.compose.runtime.mutableStateOf<TextureView?>(null) }
+    SampleForGlass(surface, 1.12f)
     key(player) {
         // 12% larger than the screen: covers the TV safe-area margins and crops the corner network bugs.
         AndroidView(
-            factory = { c -> TextureView(c).also { player.setVideoTextureView(it) } },
+            factory = { c -> TextureView(c).also { player.setVideoTextureView(it); surface = it } },
             modifier = modifier.graphicsLayer { scaleX = 1.12f; scaleY = 1.12f },
         )
     }
