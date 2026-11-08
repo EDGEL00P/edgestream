@@ -67,5 +67,5 @@ fun bandRows(tile: Tile, i: BandInputs): List<BandRow> = when (tile) {
         BandRow("Warnings", listOfNotNull(i.alert?.let(BandItem::Alert))),
         BandRow("Forecast", i.forecast.take(5).map(BandItem::Day)),
     )
-    Tile.SEARCH, Tile.SETTINGS, Tile.PHONE, Tile.APPS, Tile.CALENDAR -> emptyList()
+    Tile.SEARCH, Tile.SETTINGS, Tile.PHONE, Tile.APPS, Tile.CALENDAR, Tile.ODDS -> emptyList()
 }.filter { it.items.isNotEmpty() }

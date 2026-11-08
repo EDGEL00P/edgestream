@@ -59,7 +59,8 @@ class ShellTest {
     @Test fun tileMappingsRoundTrip() {
         Tile.entries.filter { it != Tile.PHONE }.forEach { assertEquals(it, tileFor(screenFor(it)!!)) }
         assertEquals(null, screenFor(Tile.PHONE))
-        assertEquals(Tile.SPORTS, tileFor(Screen.BETTING))
+        assertEquals(Tile.ODDS, tileFor(Screen.BETTING))
+        assertEquals(Screen.BETTING, screenFor(Tile.ODDS))
         assertEquals(Tile.SPORTS, tileFor(Screen.SPORTS))
         assertEquals(Tile.MOVIES, tileFor(Screen.DEBRID))
         assertEquals(Tile.SETTINGS, tileFor(Screen.SYSTEM))

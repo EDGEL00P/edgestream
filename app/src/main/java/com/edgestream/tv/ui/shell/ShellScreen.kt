@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.QueryStats
 import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.PhoneAndroid
@@ -122,6 +123,7 @@ private fun Tile.icon(): ImageVector = when (this) {
     Tile.SPORTS -> Icons.Rounded.SportsSoccer
     Tile.MOVIES -> Icons.Rounded.Movie
     Tile.WEATHER -> Icons.Rounded.Cloud
+    Tile.ODDS -> Icons.Rounded.QueryStats
     Tile.CALENDAR -> Icons.Rounded.CalendarMonth
 }
 

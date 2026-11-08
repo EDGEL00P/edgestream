@@ -6,7 +6,7 @@ import com.edgestream.tv.ui.Screen
 /** Everything the dock offers: four utility icons, then the five sections. */
 enum class Tile(val label: String, val utility: Boolean) {
     SEARCH("Search", true), SETTINGS("Settings", true), PHONE("Phone Remote", true), APPS("Apps", true),
-    LIVE("TV Guide", false), SPORTS("Sports", false), MOVIES("On Demand", false), WEATHER("Weather", false), CALENDAR("Planner", false),
+    LIVE("TV Guide", false), SPORTS("Sports", false), ODDS("Odds", false), MOVIES("On Demand", false), WEATHER("Weather", false), CALENDAR("Planner", false),
 }
 
 val DEFAULT_TILE = Tile.SPORTS
@@ -64,6 +64,7 @@ fun reduce(s: ShellState, e: ShellEvent): Step = when (e) {
 fun screenFor(t: Tile): Screen? = when (t) {
     Tile.LIVE -> Screen.LIVE
     Tile.SPORTS -> Screen.TIMELINE
+    Tile.ODDS -> Screen.BETTING
     Tile.MOVIES -> Screen.MOVIES
     Tile.WEATHER -> Screen.RADAR
     Tile.CALENDAR -> Screen.CALENDAR
@@ -77,7 +78,8 @@ fun screenFor(t: Tile): Screen? = when (t) {
 fun tileFor(s: Screen): Tile? = when (s) {
     Screen.HOME -> null
     Screen.LIVE, Screen.GUIDE -> Tile.LIVE
-    Screen.TIMELINE, Screen.SPORTS, Screen.BETTING -> Tile.SPORTS
+    Screen.TIMELINE, Screen.SPORTS -> Tile.SPORTS
+    Screen.BETTING -> Tile.ODDS
     Screen.MOVIES, Screen.DEBRID -> Tile.MOVIES
     Screen.SERIES -> Tile.MOVIES
     Screen.RADAR -> Tile.WEATHER
