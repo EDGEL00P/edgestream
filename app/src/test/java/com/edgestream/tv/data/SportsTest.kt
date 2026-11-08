@@ -181,23 +181,53 @@ class SportsTest {
     }
 
     @Test
-    fun missingLocalBroadcastFallsBackToSingleLeagueChannel() {
+    fun unverifiedGameGetsNoChannelButLeagueChannelsStayOffered() {
+        // NBA TV / League Pass show one game of many: guessing sends the viewer to the wrong game.
         val pass = channel("pass", "NBA League Pass", group = "NBA")
         val g = game("nba:1", Sports.State.LIVE, team("PHX"), team("LAL"), league = nba(), broadcasts = listOf("Arizona Family TV"))
         val lookup = Sports.ChannelLookup(listOf(pass))
-        assertEquals(pass, lookup.find(g))
+        assertNull(lookup.find(g))
         assertEquals(listOf("Arizona Family TV"), lookup.missing(g))
+        assertEquals(listOf(pass), lookup.candidates(g))
     }
 
     @Test
-    fun ambiguousEventChannelsOfferTheFirstLeagueChannel() {
+    fun numberedEventSlotsNeedTheirEventToMatch() {
         val rack = (1..3).map { channel("nba$it", "NBA 0$it", group = "NBA") }
         val g = game("nba:1", Sports.State.LIVE, team("PHX"), team("LAL"), league = nba(), broadcasts = listOf("Arizona Family TV"))
         val lookup = Sports.ChannelLookup(rack)
-        // A real league channel is better than claiming the provider has nothing.
-        assertEquals("NBA 01", lookup.find(g)?.name)
+        assertNull(lookup.find(g))
         assertFalse(lookup.isDirectMatch(g))
         assertEquals(3, lookup.candidates(g).size)
+    }
+
+    @Test
+    fun espnPlusSlotsAreNotTheEspnPlusNetwork() {
+        // Seen on the Shield: four NHL games all sent to "ESPN+ 001" via the ESPN+ group.
+        val slots = (1..2).map { channel("e$it", "ESPN+ 00$it", group = "ESPN+") }
+        val g = game("nhl:1", Sports.State.LIVE, team("CGY"), team("PHI"), broadcasts = listOf("ESPN+"))
+        assertNull(Sports.ChannelLookup(slots).find(g))
+    }
+
+    @Test
+    fun numberedSeriesFeedsAreSlotsButNumberedNetworksAreNot() {
+        val prime = channel("p1", "Prime Video Serie 1 HD")
+        val jax = game("nfl:9", Sports.State.UPCOMING, team("BAL"), team("JAX"), broadcasts = listOf("Prime Video"))
+        assertNull(Sports.ChannelLookup(listOf(prime)).find(jax))
+        val foxSports = channel("fs", "Fox Sports 503", group = "Fox Sports")
+        val epl = game("epl:1", Sports.State.LIVE, team("ARS"), team("CHE"), broadcasts = listOf("Fox Sports"))
+        assertEquals(foxSports, Sports.ChannelLookup(listOf(foxSports)).find(epl))
+    }
+
+    @Test
+    fun aNetworkIsNotItsSportsSpinOff() {
+        // CBS is not CBS Sports Network; Fox is not Fox Sports. ESPN HD is still ESPN.
+        val cbssn = channel("cbssn", "CBS Sports Network")
+        val nflGame = game("nfl:1", Sports.State.UPCOMING, team("NO"), team("CLE"), broadcasts = listOf("CBS"))
+        assertNull(Sports.ChannelLookup(listOf(cbssn)).find(nflGame))
+        val espnHd = channel("espnhd", "ESPN HD")
+        val espnGame = game("nba:3", Sports.State.LIVE, team("DAL"), team("BKN"), league = nba(), broadcasts = listOf("ESPN"))
+        assertEquals(espnHd, Sports.ChannelLookup(listOf(espnHd)).find(espnGame))
     }
 
     @Test

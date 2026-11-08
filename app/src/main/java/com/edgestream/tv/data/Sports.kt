@@ -944,9 +944,12 @@ object Sports {
      * re-normalizing the whole lineup for every game card (the old hub did that thousands of
      * times per frame on large playlists).
      */
+    /** Set by the app in debuggable builds: log channel choices under the EdgeMatch tag. */
+    @Volatile var traceOn = false
+
     class ChannelLookup(
         private val channels: List<ChannelEntity>,
-        rawNames: Map<String, String> = emptyMap(),
+        private val rawNames: Map<String, String> = emptyMap(),
         /** The viewer's "always watch on" choices (ChannelPins); a pinned channel always comes first. */
         private val pins: Map<String, String> = emptyMap(),
         /** Game id -> guide ids whose programme at game time names both teams (see [airsGame]). */
@@ -991,24 +994,38 @@ object Sports {
         }
 
         /** The best single channel for [g], or null when the lineup genuinely doesn't carry it. */
-        fun find(g: Game): ChannelEntity? {
-            pinned(g)?.let { return it }
-            teamMatches(g).firstOrNull()?.let { return it }
+        fun find(g: Game): ChannelEntity? = choose(g).also { c -> traceChoice(g, c) }
+
+        /** Debug builds log each game's choice once, with the rule that made it and the raw name. */
+        private val traced = java.util.Collections.synchronizedSet(HashSet<String>())
+        private var lastRule = ""
+        private fun traceChoice(g: Game, c: ChannelEntity?) {
+            if (!traceOn || !traced.add(g.id)) return
+            runCatching {
+                android.util.Log.d("EdgeMatch", "${g.league.id} ${g.away.abbr}@${g.home.abbr} -> ${c?.name ?: "none"} via $lastRule | raw=${c?.let { rawNames[it.key] ?: it.name }}")
+            }
+        }
+
+        private fun choose(g: Game): ChannelEntity? {
+            lastRule = "pin"; pinned(g)?.let { return it }
+            lastRule = "team"; teamMatches(g).firstOrNull()?.let { return it }
             // The guide says what a channel is actually airing, so it finds the viewer's own
             // broadcaster (Fox Sports, Sky Sports) that ESPN's US network list never names.
-            guideMatches(g).firstOrNull()?.let { return it }
+            lastRule = "guide"; guideMatches(g).firstOrNull()?.let { return it }
+            lastRule = "network"
             for (broadcast in g.broadcasts) networkMatches(broadcast).firstOrNull()?.let { return it }
-            // The exact local RSN may be missing. Prefer a league-wide channel (League Pass,
-            // RedZone, Sunday Ticket); otherwise take the first league-branded channel the
-            // lineup actually carries. A 10k-channel provider almost always has one, and a
-            // real NBA channel is more useful than a false "not in your lineup".
-            val league = localFirst(leagueMatches(g))
-            if (league.isEmpty()) return null
-            val wide = league.filter(::isLeagueWide)
-            if (wide.isNotEmpty()) return wide.first()
-            val branded = league.filter { isLeagueBranded(g, it) }
-            return branded.firstOrNull() ?: league.first()
+            // Nothing verified carries it. A league channel (NBA TV, "NBA 01") shows one game of
+            // many, so guessing one sends the viewer to the wrong game; candidates() still
+            // offers them as "also in your lineup".
+            lastRule = "none"
+            return null
         }
+
+        /**
+         * A numbered per-event feed ("ESPN+ 001", "NBA 01", "Paramount PPV 004"): what it shows
+         * changes event to event, so only its event text (teams) or the guide can tie it to a game.
+         */
+        private fun isEventSlot(c: ChannelEntity): Boolean = EVENT_SLOT.containsMatchIn(rawNames[c.key] ?: c.name)
 
         /** True when a channel's name or its guide entry names both teams. */
         fun isTeamMatch(g: Game): Boolean = teamMatches(g).isNotEmpty() || guideMatches(g).isNotEmpty()
@@ -1039,7 +1056,10 @@ object Sports {
         private fun guideMatches(g: Game): List<ChannelEntity> =
             localFirst(guide[g.id].orEmpty().flatMap { byEpg[it].orEmpty() }.distinct())
 
-        private fun networkMatches(broadcast: String): List<ChannelEntity> {
+        private fun networkMatches(broadcast: String): List<ChannelEntity> =
+            networkCandidates(broadcast).filterNot(::isEventSlot)
+
+        private fun networkCandidates(broadcast: String): List<ChannelEntity> {
             val wanted = NETWORK_ALIASES[broadcast.trim().lowercase()] ?: listOf(norm(broadcast))
             val found = LinkedHashSet<ChannelEntity>()
             for (alias in wanted) {
@@ -1057,10 +1077,10 @@ object Sports {
                         // "ESPN2"/"ESPNU" are different networks and must match their own alias.
                         // Short call signs (FOX, CBS) only prefix-match inside a sports context, so
                         // "Fox News" and "CBS Reality" can never stand in for a sports broadcast.
+                        // "ESPN HD", "Fox East": the same network, another feed. Anything else after
+                        // the name is a different network ("CBS" is not "CBS Sports Network").
                         name.startsWith(alias) && name.length > alias.length &&
-                            name.substring(alias.length).all { it.isLetter() } &&
-                            (alias.length >= 4 || SPORT_WORD.containsMatchIn(name) || SPORT_WORD.containsMatchIn(group)) ->
-                            found.add(channel)
+                            FEED_QUALIFIERS.matches(name.substring(alias.length)) -> found.add(channel)
                     }
                 }
                 for ((i, entry) in groupEntries.withIndex()) {
@@ -1110,27 +1130,18 @@ object Sports {
             Regex("(^|[^A-Za-z0-9])${Regex.escape(word)}([^A-Za-z0-9]|$)", RegexOption.IGNORE_CASE)
                 .containsMatchIn(text)
 
-        private fun isLeagueWide(c: ChannelEntity): Boolean = LEAGUE_WIDE.containsMatchIn(norm(c.name))
-
-        /** "NBA TV", "NBA 01", a group called "NBA": branded by the league itself. */
-        private fun isLeagueBranded(g: Game, c: ChannelEntity): Boolean {
-            val words = listOf(norm(g.league.id), norm(g.league.name))
-                .filter { it.length >= 2 }
-                .distinct()
-            if (words.isEmpty()) return false
-            val name = norm(c.name)
-            val group = norm(NameCleaner.tidyGroup(c.groupName))
-            return words.any { name.contains(it) || group.contains(it) }
-        }
-
         private companion object {
             /** "Serie A Women", "NCAA Women's Basketball", "(W)", "Femminile", "Ladies". */
             val WOMEN = Regex("""\bwom[ae]n'?s?\b|\(w\)|\bfemminile\b|\bféminine\b|\bladies\b|\bwsl\b|\bnwsl\b|\bwnba\b""", RegexOption.IGNORE_CASE)
             val WOMENS_LEAGUES = setOf("wnba", "nwsl", "wsl", "ncaaw", "wncaab")
-            val LEAGUE_WIDE = Regex(
-                "leaguepass|redzone|sundayticket|extrainnings|centerice|gamepass|" +
-                    "nbatv|nflnetwork|mlbnetwork|nhlnetwork|fightpass",
-            )
+            /** What may follow a network's name and still be that network's feed (normalized). */
+            val FEED_QUALIFIERS = Regex("(hd|fhd|uhd|sd|4k|hevc|east|west|pacific|usa|us|uk|au|nz|ca)+")
+            /**
+             * A per-event feed number: zero-padded ("ESPN+ 001", "NBA 01") or after a feed word
+             * ("Prime Video Serie 1 HD", "Peacock Series 1"). Plain numbered networks ("ESPN 2 HD",
+             * "Fox Sports 503") are real channels and don't match.
+             */
+            val EVENT_SLOT = Regex("""\b(?:serie|series|event|events|ppv|live|channel|ch|feed)\s*\d{1,3}\b|(?:^|[\s+])0\d{1,2}\b""", RegexOption.IGNORE_CASE)
             /** Channels that are clearly not a sports broadcast unless their group says otherwise. */
             val NON_SPORT = Regex(
                 "news|reality|movies?|cinema|kids|cartoon|shopping|religion|adult|porn|weather|music",

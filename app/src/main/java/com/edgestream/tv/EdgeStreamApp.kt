@@ -41,6 +41,7 @@ class EdgeStreamApp : Application(), SingletonImageLoader.Factory {
         player = PlayerEngine(this, settings)
         // Warm the Sports hub from its last snapshot before the user opens it.
         com.edgestream.tv.data.Sports.init(this)
+        com.edgestream.tv.data.Sports.traceOn = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
         com.edgestream.tv.data.Profiles.init(this)
         com.edgestream.tv.data.SportsFollows.init(this)
         com.edgestream.tv.data.ChannelPins.init(this)

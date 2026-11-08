@@ -909,7 +909,10 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
     /** The one game → channel matcher every sports screen reads, so they all agree. */
     val sportsLookup: StateFlow<com.edgestream.tv.data.Sports.ChannelLookup> =
         combine(channels, rawChannelNames, com.edgestream.tv.data.ChannelPins.state, sportsGuide) { c, raw, pins, guide ->
-            com.edgestream.tv.data.Sports.ChannelLookup(c, raw, pins, guide, java.util.Locale.getDefault().country)
+            com.edgestream.tv.data.Sports.ChannelLookup(c, raw, pins, guide, java.util.Locale.getDefault().country).also { lookup ->
+                // Debug builds trace every game's choice once (EdgeMatch log), not just the ones on screen.
+                if (com.edgestream.tv.data.Sports.traceOn && c.isNotEmpty()) sportsFeed.games.value.forEach { lookup.find(it) }
+            }
         }.flowOn(kotlinx.coroutines.Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), com.edgestream.tv.data.Sports.ChannelLookup(emptyList()))
 
