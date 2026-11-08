@@ -216,7 +216,8 @@ fun ShellScreen(
                     .focusGroup(),
             ) { hosted() }
         } else if (rest != null) {
-            Column(Modifier.fillMaxSize()) {
+            // Home has no page around it, so it takes the page padding the safe area assumes (TvFrame).
+            Column(Modifier.fillMaxSize().padding(horizontal = com.edgestream.tv.ui.PAGE_PAD_X_DP.dp, vertical = com.edgestream.tv.ui.PAGE_PAD_Y_DP.dp)) {
                 AmbientTop(vm, spotlight, tile, Modifier.fillMaxWidth().weight(1f).padding(bottom = GAP).graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen })
                 val settings by vm.settings.collectAsStateWithLifecycle()
                 // Endless sports ticker: always scores, never headlines, always scrolling.
@@ -495,13 +496,13 @@ private fun SectionTile(tile: Tile, marked: Boolean, requester: FocusRequester, 
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
-            // Labels carry the tabs; the icon lights up only on the active one, so every tab fits
-            // inside the safe area without scrolling.
-            if (focused || marked) {
-                Icon(tile.icon(), null, tint = if (focused) Edge.OnAccent else Edge.Text, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(6.dp))
+            // Icons carry the dock at rest; the focused tile opens out to name itself (tvOS/Tizen),
+            // so the bottom edge stays quiet and every tile still fits inside the safe area.
+            Icon(tile.icon(), tile.label, tint = if (focused) Edge.OnAccent else Edge.Text.copy(alpha = if (marked) 1f else 0.8f), modifier = Modifier.size(22.dp))
+            androidx.compose.animation.AnimatedVisibility(focused) {
+                Text(tile.label, color = Edge.OnAccent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    modifier = Modifier.padding(start = 8.dp))
             }
-            Text(tile.label, color = if (focused) Edge.OnAccent else Edge.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
         // Marker: which tile the band belongs to — on focus and while browsing its band.
         Box(

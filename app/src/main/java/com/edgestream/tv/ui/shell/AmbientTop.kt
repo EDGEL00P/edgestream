@@ -1,5 +1,6 @@
 package com.edgestream.tv.ui.shell
 
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,8 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.text.withStyle
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -30,6 +29,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import kotlinx.coroutines.launch
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,23 +68,14 @@ fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, modifier: Mod
     val weather by vm.weatherDetail.collectAsStateWithLifecycle()
     val minute = clock / 60_000
     val cal = remember(minute) { Calendar.getInstance().apply { timeInMillis = clock } }
-    val games by vm.sportsGames.collectAsStateWithLifecycle()
-    val nfl by vm.nflBoard.collectAsStateWithLifecycle()
-    val briefing = remember(games, nfl, minute) {
-        com.edgestream.tv.data.Briefing.compose(
-            games, nfl?.picks.orEmpty(),
-            timeOf = { Format.time(it, settings.use24h) }, now = clock,
-        )
-    }
     Column(modifier) {
-        // Screenshot top row: clock left, briefing centre, ASK right.
+        // Top row: clock left, voice right. Scores live in the hero and the ticker, nowhere else.
         val events by vm.calendarEvents.collectAsStateWithLifecycle()
         val day = cal.get(Calendar.DAY_OF_YEAR)
         val upNext = remember(events, day) { com.edgestream.tv.data.upcoming(events, java.time.LocalDate.now(), days = 14, limit = 3) }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-            TimeTile(clock, settings.use24h, weather, settings.fahrenheit, upNext, Modifier.width(240.dp))
-            if (briefing.isNotEmpty()) BriefingLine(briefing, Modifier.weight(1f).padding(start = 18.dp, top = 8.dp))
-            AskButton(vm, Modifier.padding(start = 12.dp, top = 6.dp))
+            TimeTile(clock, settings.use24h, weather, settings.fahrenheit, upNext, Modifier.weight(1f))
+            VoiceButton(vm, Modifier.padding(start = 12.dp, top = 6.dp))
         }
         val preview by vm.preview.collectAsStateWithLifecycle()
         if (spotlight is BandItem.Game) GameSpot(spotlight.game, settings.use24h, preview?.name, Modifier.weight(1f).fillMaxWidth())
@@ -91,30 +83,43 @@ fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, modifier: Mod
     }
 }
 
+/**
+ * The remote's voice key on screen: OK listens, then runs what was said the way the phone remote
+ * does (rules first, Gemini only for a guessed search). Questions open Search, where Ask answers them.
+ */
 @Composable
-private fun AskButton(vm: AppViewModel, modifier: Modifier) {
-    com.edgestream.tv.ui.components.FocusSurface(
-        onClick = { vm.openSearch("") }, modifier = modifier, focusScale = 1.04f, glow = false,
-    ) {
-        Text("/  Ask", color = Edge.Text.copy(alpha = 0.55f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
-    }
-}
-
-/** The briefing: one live sentence, key words in the theme accent, behind an accent edge. */
-@Composable
-private fun BriefingLine(parts: List<com.edgestream.tv.data.Briefing.Part>, modifier: Modifier) {
-    val accent = Edge.Accent
-    val text = androidx.compose.ui.text.buildAnnotatedString {
-        parts.forEach { p ->
-            if (p.key) withStyle(androidx.compose.ui.text.SpanStyle(color = accent, fontWeight = FontWeight.Bold)) { append(p.text) }
-            else append(p.text)
+private fun VoiceButton(vm: AppViewModel, modifier: Modifier) {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val listen = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val text = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            ?: return@rememberLauncherForActivityResult
+        val parsed = com.edgestream.tv.remote.VoiceCommand.parse(text) ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            val key = vm.settings.value.geminiApiKey
+            val cmd = if (parsed is com.edgestream.tv.remote.VoiceCommand.Search && parsed.guessed)
+                com.edgestream.tv.data.AiAssist.interpret(text, key) ?: parsed else parsed
+            if (cmd.isQuestion) vm.openSearch(text)
+            else com.edgestream.tv.remote.PhoneLink.post(com.edgestream.tv.remote.PhoneLink.Command.Voice(cmd))
         }
     }
-    Row(modifier.height(IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.width(3.dp).fillMaxHeight().background(accent))
-        Text("BRIEFING", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, modifier = Modifier.padding(horizontal = 12.dp))
-        Text(text, color = Edge.Text, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    var focused by remember { mutableStateOf(false) }
+    com.edgestream.tv.ui.components.FocusSurface(
+        onClick = {
+            runCatching {
+                listen.launch(
+                    android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                        .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM),
+                )
+            }.onFailure { vm.openSearch("") } // no speech service: typed search instead
+        },
+        modifier = modifier.onFocusChanged { focused = it.hasFocus }, shape = CircleShape, focusScale = 1.08f, glow = false,
+    ) {
+        androidx.compose.material3.Icon(
+            androidx.compose.material.icons.Icons.Rounded.Mic, "Voice",
+            tint = Edge.Text.copy(alpha = if (focused) 1f else 0.7f), modifier = Modifier.padding(10.dp).size(24.dp),
+        )
     }
 }
 
@@ -227,7 +232,12 @@ private fun GameSpot(g: Sports.Game, use24h: Boolean, previewing: String?, modif
     LaunchedEffect(g.id) { insight = runCatching { Sports.insight(g) }.getOrNull() }
     val homeChance = insight?.let { it.liveHomeWinChance ?: it.homeWinChance ?: it.marketHomeWinChance }
     val latestPlay = insight?.plays?.lastOrNull()
-    Column(modifier.padding(horizontal = 6.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    // The hero gets whatever height the band leaves, so it sizes itself to that space: full
+    // scoreboard type and the drive chart when tall, smaller type and no chart when short.
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.padding(horizontal = 6.dp, vertical = 6.dp)) {
+    val tall = maxHeight >= 240.dp
+    val big = if (maxHeight >= 180.dp) 1f else 0.8f
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(if (tall) 6.dp else 4.dp)) {
         // Eyebrow: red dot · LEAGUE · LIVE · VENUE
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(10.dp).clip(CircleShape).background(Edge.Live))
@@ -240,40 +250,44 @@ private fun GameSpot(g: Sports.Game, use24h: Boolean, previewing: String?, modif
         }
         Text(
             "${g.away.name.uppercase()} VS ${g.home.name.uppercase()}",
-            color = Edge.Text, fontSize = 56.sp, lineHeight = 60.sp, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp,
+            color = Edge.Text, fontSize = 56.sp * big, lineHeight = 60.sp * big, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp,
             maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
-        // Score line: AWAY score · ABBRs + clock · HOME score (screenshot: 24 CIN·ATL Q3·6:18 17)
+        // Away score, both abbreviations over the clock, home score.
+        // The win chance shares the score row (to its right), so the hero needs no extra lines.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         if (g.state == Sports.State.UPCOMING) {
             Text("${SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(Date(g.startMs))}  ${Format.time(g.startMs, use24h)}",
-                color = Edge.Text, fontSize = 44.sp, fontWeight = FontWeight.Black)
+                color = Edge.Text, fontSize = 44.sp * big, lineHeight = 48.sp * big, fontWeight = FontWeight.Black)
         } else {
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                Text(g.away.score ?: "0", color = Edge.Text, fontSize = 48.sp, fontWeight = FontWeight.Black)
-                Column(Modifier.padding(bottom = 8.dp)) {
+                Text(g.away.score ?: "0", color = Edge.Text, fontSize = 48.sp * big, lineHeight = 50.sp * big, fontWeight = FontWeight.Black)
+                Column(Modifier.padding(bottom = 6.dp)) {
                     Text("${g.away.abbr} · ${g.home.abbr}", color = Edge.Text.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     Text(if (g.state == Sports.State.FINAL) "FINAL" else g.detail.ifBlank { "LIVE" }, color = Edge.Text.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
-                Text(g.home.score ?: "0", color = Edge.Text.copy(alpha = 0.45f), fontSize = 48.sp, fontWeight = FontWeight.Black)
+                Text(g.home.score ?: "0", color = Edge.Text.copy(alpha = 0.45f), fontSize = 48.sp * big, lineHeight = 50.sp * big, fontWeight = FontWeight.Black)
             }
         }
         if (homeChance != null) {
             val away = teamColor(g.away)
             val home = teamColor(g.home)
-            Row(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(50))) {
-                Box(Modifier.weight((100 - homeChance).coerceAtLeast(1).toFloat()).fillMaxHeight().background(away))
-                Box(Modifier.weight(homeChance.coerceAtLeast(1).toFloat()).fillMaxHeight().background(home.copy(alpha = 0.75f)))
+            Column(Modifier.padding(start = 40.dp, bottom = 10.dp).weight(1f)) {
+                Row(Modifier.fillMaxWidth()) {
+                    Text("${g.away.abbr} ${100 - homeChance}% to win", color = Edge.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Spacer(Modifier.weight(1f))
+                    Text("${g.home.abbr} $homeChance%", color = Edge.Text.copy(alpha = 0.7f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+                Row(Modifier.padding(top = 4.dp).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50))) {
+                    Box(Modifier.weight((100 - homeChance).coerceAtLeast(1).toFloat()).fillMaxHeight().background(away))
+                    Box(Modifier.weight(homeChance.coerceAtLeast(1).toFloat()).fillMaxHeight().background(home.copy(alpha = 0.75f)))
+                }
             }
-            Row(Modifier.fillMaxWidth()) {
-                Text("${g.away.abbr} ${100 - homeChance}% to win", color = Edge.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.weight(1f))
-                Text("${g.home.abbr} $homeChance%", color = Edge.Text.copy(alpha = 0.7f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            }
-            // Drive/field chart (NFL-style, from latest play text) — only when ESPN published plays.
-            latestPlay?.let { DriveChart(g, it, Modifier.fillMaxWidth()) }
-        } else if (latestPlay != null) {
-            DriveChart(g, latestPlay, Modifier.fillMaxWidth())
         }
+        }
+        // Drive/field chart from ESPN's latest play, when there is room and plays were published.
+        if (tall && latestPlay != null) DriveChart(g, latestPlay, Modifier.fillMaxWidth())
+    }
     }
 }
 
@@ -300,14 +314,14 @@ private fun DriveChart(g: Sports.Game, play: Sports.Play, modifier: Modifier) {
                 }
             }
             // End zones
-            Box(Modifier.align(Alignment.CenterStart).width(18.dp).height(52.dp).background(Color(0xFFE6512A).copy(alpha = 0.75f)))
-            Box(Modifier.align(Alignment.CenterEnd).width(18.dp).height(52.dp).background(Color(0xFF7A1030).copy(alpha = 0.85f)))
+            Box(Modifier.align(Alignment.CenterStart).width(18.dp).height(52.dp).background(teamColor(g.away).copy(alpha = 0.8f)))
+            Box(Modifier.align(Alignment.CenterEnd).width(18.dp).height(52.dp).background(teamColor(g.home).copy(alpha = 0.8f)))
             // Ball marker + line
             val cx = (frac.coerceIn(0.02f, 0.98f))
             Box(Modifier.fillMaxWidth(cx).height(52.dp), contentAlignment = Alignment.CenterEnd) {
                 Box(Modifier.fillMaxWidth().height(3.dp).background(Edge.Live))
-                Box(Modifier.size(14.dp).clip(CircleShape).background(Color(0xFF8A5A2B)).padding(2.dp)) {
-                    Box(Modifier.fillMaxSize().clip(CircleShape).background(Color.White))
+                Box(Modifier.size(14.dp).clip(CircleShape).background(Edge.Live).padding(2.dp)) {
+                    Box(Modifier.fillMaxSize().clip(CircleShape).background(Edge.Text))
                 }
             }
         }

@@ -151,7 +151,7 @@ fun GuideScreen(vm: AppViewModel, overlay: Boolean = false, onClose: () -> Unit 
     var pending by remember { mutableStateOf<Int?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
-    // Over live video: a solid, readable panel — not a frosted see-through (screenshot: readable guide).
+    // Over live video the guide is a solid panel: text over moving video must stay readable.
     // Inset matches every tab (EdgeLayout): EdgeApp gives the nav 40dp, content sits 14dp in.
     val backdrop = if (overlay) Modifier.background(Edge.Bg.copy(alpha = 0.97f)) else Modifier
     // Over live video the root UI padding is not applied, so the overlay adds the safe area itself.

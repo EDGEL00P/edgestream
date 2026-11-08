@@ -321,7 +321,7 @@ private fun RadarMap(
                     }
                 }
                 val r = 8.dp.toPx()
-                // Pulsing user location (Singularity-style cream + copper pulse, themed).
+                // Pulsing user location in the theme colours.
                 drawCircle(Edge.Text.copy(alpha = 0.18f * pulse), radius = r * (2.4f + pulse), center = center)
                 drawCircle(Edge.Accent.copy(alpha = 0.25f), radius = r * 2.4f, center = center)
                 drawCircle(Edge.Bg, radius = r, center = center)

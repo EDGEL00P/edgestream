@@ -118,7 +118,7 @@ fun GameCard(g: Sports.Game, requester: FocusRequester, onClick: () -> Unit) {
     val live = g.state == Sports.State.LIVE
     val minute = remember(g.startMs, g.state) { if (live) g.detail.substringAfter("·").trim().substringBefore(" ").ifBlank { g.detail } else "" }
     BandCard(260.dp, requester, onClick) { focused ->
-        // Focused banner like screenshot: "Watch on …" pill overlapping the top edge.
+        // Focused card: a "Watch on …" pill overlapping the top edge.
         if (focused) {
             val label = "Watch on ${g.broadcasts.firstOrNull() ?: g.league.name}"
             Text(
