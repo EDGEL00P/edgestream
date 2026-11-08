@@ -18,6 +18,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,7 +69,8 @@ fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, modifier: Mod
         val day = cal.get(Calendar.DAY_OF_YEAR)
         val upNext = remember(events, day) { com.edgestream.tv.data.upcoming(events, java.time.LocalDate.now(), days = 14, limit = 3) }
         TimeTile(clock, settings.use24h, weather, settings.fahrenheit, upNext, Modifier.width(196.dp).fillMaxHeight())
-        Spotlight(spotlight, tile, settings.use24h, Modifier.weight(1f).fillMaxHeight())
+        if (spotlight is BandItem.Game) GameSpot(spotlight.game, settings.use24h, Modifier.weight(1f).fillMaxHeight())
+        else Spotlight(spotlight, tile, settings.use24h, Modifier.weight(1f).fillMaxHeight())
     }
 }
 
@@ -165,6 +171,72 @@ private fun Spotlight(item: BandItem?, tile: Tile, use24h: Boolean, modifier: Mo
         SpotArt(item, Modifier.padding(start = 14.dp).fillMaxHeight())
     }
 }
+
+/**
+ * Home becomes the focused game: its name in scoreboard type, the score large, and ESPN's own
+ * win probability as a ribbon in the two teams' colours (live model in play, matchup predictor
+ * before kick-off, the market's no-vig price when ESPN publishes neither).
+ */
+@Composable
+private fun GameSpot(g: Sports.Game, use24h: Boolean, modifier: Modifier) {
+    var insight by remember(g.id) { mutableStateOf<Sports.Insight?>(null) }
+    LaunchedEffect(g.id) { insight = runCatching { Sports.insight(g) }.getOrNull() }
+    val homeChance = insight?.let { it.liveHomeWinChance ?: it.homeWinChance ?: it.marketHomeWinChance }
+    val source = when {
+        insight?.liveHomeWinChance != null -> "live win probability"
+        insight?.homeWinChance != null -> "ESPN matchup predictor"
+        insight?.marketHomeWinChance != null -> "market, no vig"
+        else -> null
+    }
+    Row(modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (g.state == Sports.State.LIVE) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(Edge.Live))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(
+                    listOfNotNull(g.league.name, if (g.state == Sports.State.LIVE) "LIVE" else null, g.venue).joinToString("  ·  ").uppercase(),
+                    color = Edge.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                "${g.away.name} vs ${g.home.name}",
+                style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                if (g.state == Sports.State.UPCOMING) {
+                    Text(
+                        "${SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(Date(g.startMs))}  ${Format.time(g.startMs, use24h)}",
+                        style = MaterialTheme.typography.titleLarge, color = Edge.Text,
+                    )
+                } else {
+                    Text("${g.away.abbr} ${g.away.score ?: "0"}", style = MaterialTheme.typography.displaySmall)
+                    Text(if (g.state == Sports.State.FINAL) "FINAL" else g.detail, color = Dim, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text("${g.home.score ?: "0"} ${g.home.abbr}", style = MaterialTheme.typography.displaySmall)
+                }
+            }
+            if (homeChance != null && source != null) {
+                val away = teamColor(g.away)
+                val home = teamColor(g.home)
+                Row(Modifier.width(420.dp).height(6.dp).clip(RoundedCornerShape(50))) {
+                    Box(Modifier.weight((100 - homeChance).coerceAtLeast(1).toFloat()).fillMaxHeight().background(away))
+                    Box(Modifier.weight(homeChance.coerceAtLeast(1).toFloat()).fillMaxHeight().background(home))
+                }
+                Row(Modifier.width(420.dp)) {
+                    Text("${g.away.abbr} ${100 - homeChance}%", color = Edge.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(source, color = Dim, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.weight(1f))
+                    Text("${g.home.abbr} $homeChance%", color = Edge.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+        SpotArt(BandItem.Game(g), Modifier.padding(start = 14.dp).fillMaxHeight())
+    }
+}
+
+/** A team's own colour, or the theme's text colour when ESPN has none. */
+private fun teamColor(t: Sports.Team): Color =
+    t.color?.takeIf { it.length == 6 }?.let { runCatching { Color(android.graphics.Color.parseColor("#$it")) }.getOrNull() } ?: Edge.Text.copy(alpha = 0.5f)
 
 @Composable
 private fun SpotArt(item: BandItem?, modifier: Modifier) {

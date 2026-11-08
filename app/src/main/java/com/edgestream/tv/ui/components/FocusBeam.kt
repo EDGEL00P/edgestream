@@ -115,8 +115,8 @@ object RoomLight {
 @Composable
 fun RoomLightOverlay(modifier: Modifier = Modifier) {
     val c = RoomLight.colors
-    val a by animateColorAsState(c?.first?.copy(alpha = 0.38f) ?: Color.Transparent, tween(900), label = "roomA")
-    val b by animateColorAsState(c?.second?.copy(alpha = 0.30f) ?: Color.Transparent, tween(900), label = "roomB")
+    val a by animateColorAsState(c?.first?.copy(alpha = 0.24f) ?: Color.Transparent, tween(900), label = "roomA")
+    val b by animateColorAsState(c?.second?.copy(alpha = 0.18f) ?: Color.Transparent, tween(900), label = "roomB")
     Box(
         modifier.graphicsLayer { blendMode = BlendMode.Screen }.drawBehind {
             if (a.alpha <= 0.01f && b.alpha <= 0.01f) return@drawBehind
