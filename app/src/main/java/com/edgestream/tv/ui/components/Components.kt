@@ -9,6 +9,7 @@ import com.edgestream.tv.ui.EdgeShapes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -99,7 +100,7 @@ fun FocusSurface(
     color: Color = Edge.Panel,
     focusedColor: Color = Edge.PanelHi,
     selected: Boolean = false,
-    focusScale: Float = 1.05f,
+    focusScale: Float = 1.03f,
     glow: Boolean = true,
     /** Optional "row|item" key for restoring the last focused card in this row. */
     memoryKey: String? = null,
@@ -170,6 +171,13 @@ fun FocusSurface(
             }
             .clip(shape)
             .background(fill)
+            // Focus reads as an instrument highlight: a thin accent edge and a lit leading bar.
+            .then(
+                if (focused) Modifier.border(1.5.dp, Edge.Accent.copy(alpha = 0.9f), shape).drawWithContent {
+                    drawContent()
+                    drawRect(Edge.Accent, size = androidx.compose.ui.geometry.Size(4.dp.toPx(), size.height))
+                } else Modifier,
+            )
             .combinedClickable(
                 interactionSource = interaction,
                 indication = null,

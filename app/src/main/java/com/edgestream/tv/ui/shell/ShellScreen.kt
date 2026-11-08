@@ -427,8 +427,12 @@ private fun SectionTile(tile: Tile, marked: Boolean, requester: FocusRequester, 
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
-            Icon(tile.icon(), null, tint = if (focused) Edge.OnAccent else Edge.Text, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(6.dp))
+            // Labels carry the tabs; the icon lights up only on the active one, so every tab fits
+            // inside the safe area without scrolling.
+            if (focused || marked) {
+                Icon(tile.icon(), null, tint = if (focused) Edge.OnAccent else Edge.Text, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(6.dp))
+            }
             Text(tile.label, color = if (focused) Edge.OnAccent else Edge.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
         // Marker: which tile the band belongs to — on focus and while browsing its band.

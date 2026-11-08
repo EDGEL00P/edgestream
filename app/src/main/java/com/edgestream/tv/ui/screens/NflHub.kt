@@ -98,7 +98,7 @@ private fun SlateRow(pick: NflPicks.Pick, use24h: Boolean, selected: Boolean, pr
             Column(Modifier.weight(1f).padding(start = 10.dp)) {
                 Text("${g.away.abbr} @ ${g.home.abbr}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1)
                 Text(
-                    Format.time(g.startMs, use24h) + if (props > 0) "  ·  $props props" else "",
+                    Format.time(g.startMs, use24h) + when (props) { 0 -> ""; 1 -> "  ·  1 prop"; else -> "  ·  $props props" },
                     style = MaterialTheme.typography.labelSmall, color = if (focused || selected) Edge.Dim else Edge.Faint, maxLines = 1,
                 )
             }
@@ -141,9 +141,12 @@ private fun MatchupPane(pick: NflPicks.Pick, board: NflPicks.Board, use24h: Bool
             }
             pick.tier?.let { Pill(it.label.uppercase(), color = Edge.Accent) }
             Stat("MODEL LINE", NflPicks.lineText(pick.modelHomeMargin, g.home.abbr, g.away.abbr))
-            Stat("MARKET", pick.marketHomeMargin?.let { NflPicks.lineText(it, g.home.abbr, g.away.abbr) } ?: "—")
+            Stat("SPREAD", pick.marketHomeMargin?.let { NflPicks.lineText(it, g.home.abbr, g.away.abbr) } ?: "—")
             Stat("TOTAL", pick.totalLine?.let(NflPicks::trim) ?: "—")
-            Stat("MARKET WIN", pick.marketHomeProb?.let { "${g.home.abbr} ${pct(it)}" } ?: "—")
+            Stat(
+                "MARKET",
+                pick.marketHomeProb?.let { home -> if (pick.winner == g.home.abbr) pct(home) else pct(1 - home) }?.let { "${pick.winner} $it" } ?: "—",
+            )
         }
 
         if (pick.values.isNotEmpty()) {
@@ -202,9 +205,10 @@ private fun TeamProps(team: Sports.Team, leans: List<NflProps.Lean>, modifier: M
         leans.forEach { l ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
+                    Text(l.player.name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        "${l.player.name}  ${if (l.over) "Over" else "Under"} ${NflPicks.trim(l.line)} ${l.market.label}",
-                        style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        "${if (l.over) "Over" else "Under"} ${NflPicks.trim(l.line)} ${l.market.label}",
+                        style = MaterialTheme.typography.labelMedium, color = Edge.Text, maxLines = 1,
                     )
                     Text(
                         "proj ${String.format(Locale.US, "%.1f", l.projection.mean)}" +
@@ -232,7 +236,7 @@ private fun TrackRecordLine(board: NflPicks.Board) {
     Column {
         Text(
             "Since ${NflModel.HOLDOUT_FROM}, unseen seasons: " + parts.joinToString("  ·  "),
-            style = MaterialTheme.typography.labelSmall, color = Edge.Dim, maxLines = 2,
+            style = MaterialTheme.typography.labelSmall, color = Edge.Dim, maxLines = 3,
         )
         Text(
             "Props are projection vs line, graded live. Informational only. Data: nflverse (CC-BY 4.0), ESPN, Open-Meteo.",

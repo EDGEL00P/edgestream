@@ -256,16 +256,16 @@ fun Modifier.bleed(safe: SafeArea, extra: Dp = 0.dp) = layout { measurable, cons
 }
 
 /**
- * Corner radii shared across the app — luxury = generous, consistent corners.
- * Posters 18, cards 22, panels 28, chips fully round. Hero stays 0 for full-bleed cinema.
+ * Corner radii shared across the app: crisp, instrument-like corners. Posters 10, cards 12,
+ * panels 16, chips fully round. Hero stays 0 for full-bleed cinema.
  */
 object EdgeShapes {
-    val Badge = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
-    val Poster = androidx.compose.foundation.shape.RoundedCornerShape(18.dp)
-    val Card = androidx.compose.foundation.shape.RoundedCornerShape(22.dp)
+    val Badge = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+    val Poster = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+    val Card = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
     /** Full-bleed hero: no box, no radius. Windows that need a box use [Card] or [Panel]. */
     val Hero = androidx.compose.foundation.shape.RoundedCornerShape(0.dp)
-    val Panel = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
+    val Panel = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
     val Chip = androidx.compose.foundation.shape.RoundedCornerShape(50)
 }
 
@@ -332,14 +332,19 @@ private val Inter = androidx.compose.ui.text.font.FontFamily(
     },
 )
 
+/** Condensed scoreboard face for display type: headlines, scores, big numbers. */
+private val Display = androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(com.edgestream.tv.R.font.bebasneue_regular))
+
 private val WarmText = Color(0xFFF2EFE9)
 private val WarmDim = Color(0xFFA7A39C)
 
 private fun typography(p: Palette) = Typography(
-    displayMedium = TextStyle(fontFamily = Inter, fontSize = 60.sp, fontWeight = FontWeight.Bold, color = p.text, letterSpacing = (-1.5).sp, lineHeight = 64.sp),
-    displaySmall = TextStyle(fontFamily = Inter, fontSize = 46.sp, fontWeight = FontWeight.Bold, color = p.text, letterSpacing = (-1.0).sp, lineHeight = 52.sp),
-    headlineSmall = TextStyle(fontFamily = Inter, fontSize = 30.sp, fontWeight = FontWeight.SemiBold, color = p.text, letterSpacing = (-0.5).sp, lineHeight = 36.sp),
+    // Bebas is narrow and caps-only, so display sizes run larger with open tracking.
+    displayMedium = TextStyle(fontFamily = Display, fontSize = 76.sp, color = p.text, letterSpacing = 1.0.sp, lineHeight = 76.sp),
+    displaySmall = TextStyle(fontFamily = Display, fontSize = 58.sp, color = p.text, letterSpacing = 0.8.sp, lineHeight = 60.sp),
+    headlineSmall = TextStyle(fontFamily = Display, fontSize = 40.sp, color = p.text, letterSpacing = 0.6.sp, lineHeight = 44.sp),
     titleLarge = TextStyle(fontFamily = Inter, fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = p.text, letterSpacing = (-0.25).sp, lineHeight = 30.sp),
+    titleSmall = TextStyle(fontFamily = Inter, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = p.text, lineHeight = 21.sp),
     titleMedium = TextStyle(fontFamily = Inter, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = p.text, letterSpacing = (-0.15).sp, lineHeight = 24.sp),
     bodyLarge = TextStyle(fontFamily = Inter, fontSize = 18.sp, color = p.text, lineHeight = 27.sp),
     bodyMedium = TextStyle(fontFamily = Inter, fontSize = 16.sp, color = p.dim, lineHeight = 23.sp),
