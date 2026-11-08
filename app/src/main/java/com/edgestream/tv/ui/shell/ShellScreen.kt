@@ -170,6 +170,19 @@ fun ShellScreen(
     // At rest, the room takes the spotlit game's colours; open sections light it themselves.
     val roomGame = (spotlight as? BandItem.Game)?.game
     LaunchedEffect(roomGame?.id, rest != null) { if (rest != null) com.edgestream.tv.ui.components.RoomLight.of(roomGame) }
+    // Rest on a live game and its channel starts behind Home; a short dwell so passing focus
+    // doesn't spin streams up and down.
+    val previewLookup by vm.sportsLookup.collectAsStateWithLifecycle()
+    val livePreviewGame = roomGame?.takeIf { rest?.inBand == true && it.state == com.edgestream.tv.data.Sports.State.LIVE }
+    // Keyed on the lookup too: it fills in once the guide is matched, which can trail launch.
+    LaunchedEffect(livePreviewGame?.id, previewLookup) {
+        vm.preview.value = null
+        val g = livePreviewGame ?: return@LaunchedEffect
+        delay(1_200)
+        vm.preview.value = previewLookup.find(g)
+        if (com.edgestream.tv.data.Sports.traceOn) android.util.Log.d("EdgePreview", "${g.id} -> ${vm.preview.value?.name ?: "no channel"}")
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { vm.preview.value = null } }
 
     Box(Modifier.fillMaxSize()) {
         Shade(expand = { expand }, shown = { shown })
@@ -329,7 +342,11 @@ private fun Band(
                     Text(header ?: "", color = Edge.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.height(24.dp))
                     val req = requesters.getValue(item.id)
                     when (item) {
-                        is BandItem.Game -> GameCard(item.game, req) { onEvent(ShellEvent.Open(Tile.SPORTS)) }
+                        // While a game previews behind Home, OK takes its channel full screen; otherwise Sports opens.
+                        is BandItem.Game -> GameCard(item.game, req) {
+                            val ch = vm.preview.value
+                            if (ch != null) vm.playChannel(ch, vm.zapListFor(ch)) else onEvent(ShellEvent.Open(Tile.SPORTS))
+                        }
                         is BandItem.Channel -> ChannelCard(item, req) { vm.playChannel(item.channel, item.row) }
                         is BandItem.Resume -> ResumeCard(item, req) { vm.resume(item.p) }
                         is BandItem.Watch -> WatchCard(item, req) { vm.openWatchItem(item.item) }

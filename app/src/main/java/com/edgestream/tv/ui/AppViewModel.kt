@@ -878,6 +878,9 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
         }
     }
 
+    /** The live channel previewing behind Home while a live game is focused there (null: highlights). */
+    val preview = MutableStateFlow<ChannelEntity?>(null)
+
     /** An NFL game the Odds hub should open on (from Ask); the hub clears it once shown. */
     val nflFocus = MutableStateFlow<String?>(null)
 

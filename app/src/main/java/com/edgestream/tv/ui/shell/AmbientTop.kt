@@ -82,7 +82,8 @@ fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, modifier: Mod
         val day = cal.get(Calendar.DAY_OF_YEAR)
         val upNext = remember(events, day) { com.edgestream.tv.data.upcoming(events, java.time.LocalDate.now(), days = 14, limit = 3) }
         TimeTile(clock, settings.use24h, weather, settings.fahrenheit, upNext, Modifier.width(196.dp).fillMaxHeight())
-        if (spotlight is BandItem.Game) GameSpot(spotlight.game, settings.use24h, Modifier.weight(1f).fillMaxHeight())
+        val preview by vm.preview.collectAsStateWithLifecycle()
+        if (spotlight is BandItem.Game) GameSpot(spotlight.game, settings.use24h, preview?.name, Modifier.weight(1f).fillMaxHeight())
         else Spotlight(spotlight, tile, settings.use24h, Modifier.weight(1f).fillMaxHeight())
     }
     }
@@ -209,7 +210,7 @@ private fun Spotlight(item: BandItem?, tile: Tile, use24h: Boolean, modifier: Mo
  * before kick-off, the market's no-vig price when ESPN publishes neither).
  */
 @Composable
-private fun GameSpot(g: Sports.Game, use24h: Boolean, modifier: Modifier) {
+private fun GameSpot(g: Sports.Game, use24h: Boolean, previewing: String?, modifier: Modifier) {
     var insight by remember(g.id) { mutableStateOf<Sports.Insight?>(null) }
     LaunchedEffect(g.id) { insight = runCatching { Sports.insight(g) }.getOrNull() }
     val homeChance = insight?.let { it.liveHomeWinChance ?: it.homeWinChance ?: it.marketHomeWinChance }
@@ -227,7 +228,9 @@ private fun GameSpot(g: Sports.Game, use24h: Boolean, modifier: Modifier) {
                     Spacer(Modifier.width(8.dp))
                 }
                 Text(
-                    listOfNotNull(g.league.name, if (g.state == Sports.State.LIVE) "LIVE" else null, g.venue).joinToString("  ·  ").uppercase(),
+                    // While its channel plays behind Home, say which channel that is.
+                    listOfNotNull(g.league.name, if (g.state == Sports.State.LIVE) "LIVE" else null, previewing?.let { "ON $it" } ?: g.venue)
+                        .joinToString("  ·  ").uppercase(),
                     color = Edge.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }

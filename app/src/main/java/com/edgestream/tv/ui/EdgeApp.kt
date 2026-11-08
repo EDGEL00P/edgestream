@@ -263,7 +263,15 @@ fun EdgeApp(vm: AppViewModel = viewModel()) {
     AmbientBackground(Modifier.fillMaxSize().then(if (fullscreen) Modifier.background(Color.Black) else Modifier), plain = (backdrop != null || reels.isNotEmpty()) && !fullscreen) {
         // Real game highlights on Home (photos until then). An open section gets the still photo:
         // broadcast clips carry burned-in scoreboards that read through any shade over lists.
-        if (!fullscreen && motionOn && reels.isNotEmpty() && screen == Screen.HOME && !com.edgestream.tv.PressMode.on) {
+        val preview by vm.preview.collectAsStateWithLifecycle()
+        // A live preview replaces the reel (one decoder either way) and only while nothing else plays.
+        val multiviewOn = vm.multiview.collectAsStateWithLifecycle().value != null
+        val previewing = preview?.takeIf { !fullscreen && screen == Screen.HOME && !playback.isPlaying && !multiviewOn }
+        if (previewing != null) {
+            androidx.compose.runtime.key(previewing.key) {
+                com.edgestream.tv.ui.glass.LivePreview(previewing.streamUrl, onFailed = { vm.preview.value = null }, modifier = Modifier.fillMaxSize())
+            }
+        } else if (!fullscreen && motionOn && reels.isNotEmpty() && screen == Screen.HOME && !com.edgestream.tv.PressMode.on) {
             com.edgestream.tv.ui.glass.VideoBackdrop(reels, sound = vm.settings.collectAsStateWithLifecycle().value.backdropSound, modifier = Modifier.fillMaxSize())
         } else if (!fullscreen && backdrop != null && !com.edgestream.tv.PressMode.on) {
             // Real photos, each with a slow documentary move, cross-fading to the next. The move is
