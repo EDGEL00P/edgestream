@@ -76,14 +76,15 @@ fun SportsHubPage(vm: AppViewModel) {
     val channels by vm.channels.collectAsStateWithLifecycle()
     val nowNext by vm.nowNext.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
-    val chips = remember(games, races) { sportChips(games, races.isNotEmpty()) }
+    val chips = remember(games, races) { listOf(TIME_RIVER) + sportChips(games, races.isNotEmpty()) }
+    val clock by vm.clock.collectAsStateWithLifecycle()
     var chip by rememberSaveable { mutableStateOf(ALL_SPORTS) }
     if (chip !in chips) chip = ALL_SPORTS
-    val shown = remember(games, chip) { if (chip == RACING) emptyList() else gamesFor(games, chip) }
+    val shown = remember(games, chip) { if (chip == RACING || chip == TIME_RIVER) emptyList() else gamesFor(games, chip) }
     var focusedGame by remember { mutableStateOf<Sports.Game?>(null) }
     LaunchedEffect(focusedGame?.id) { com.edgestream.tv.ui.components.RoomLight.of(focusedGame) }
     androidx.compose.runtime.DisposableEffect(Unit) { onDispose { com.edgestream.tv.ui.components.RoomLight.clear() } }
-    val featured = focusedGame?.takeIf { f -> shown.any { it.id == f.id } } ?: featuredGame(shown)
+    val featured = focusedGame?.takeIf { f -> chip == TIME_RIVER || shown.any { it.id == f.id } } ?: featuredGame(if (chip == TIME_RIVER) games else shown)
     var openRace by remember { mutableStateOf<Racing.Race?>(null) }
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
@@ -111,7 +112,10 @@ fun SportsHubPage(vm: AppViewModel) {
                 Chip(c, selected = c == chip) { chip = c; focusedGame = null; scope.launch { gridState.scrollToItem(0) } }
             }
         }
-        if (chip == RACING) {
+        if (chip == TIME_RIVER) {
+            TimeRiver(games, clock, settings.use24h, firstFocus, onFocus = { focusedGame = it }, onWatch = { watch(it) }, modifier = Modifier.weight(1f))
+            Text("Blocks run for a typical game length in each sport.", color = Dim, fontSize = 12.sp)
+        } else if (chip == RACING) {
             LazyVerticalGrid(GridCells.Fixed(3), Modifier.fillMaxSize(), state = gridState,
                 horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(4.dp)) {
                 items(races, key = { it.id }) { r ->

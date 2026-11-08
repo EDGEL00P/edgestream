@@ -3,6 +3,7 @@ package com.edgestream.tv.ui.sports
 import com.edgestream.tv.data.Sports
 
 const val ALL_SPORTS = "All sports"
+const val TIME_RIVER = "Time River"
 const val RACING = "Racing"
 
 private fun rank(s: Sports.State) = when (s) { Sports.State.LIVE -> 0; Sports.State.UPCOMING -> 1; Sports.State.FINAL -> 2 }
