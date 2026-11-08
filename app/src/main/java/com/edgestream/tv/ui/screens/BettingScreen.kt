@@ -95,17 +95,7 @@ fun BettingScreen(vm: AppViewModel) {
     val upcoming = if (marketMode == "all" || marketMode == "next") games.filter { it.state == Sports.State.UPCOMING }.sortedBy { it.startMs }.take(10) else emptyList()
     val sortedRaces = if (marketMode == "all" || marketMode == "racing") races.sortedBy { it.startMs } else emptyList()
     val nflPicks = nfl?.picks.orEmpty()
-    val nflValue = if (marketMode == "all" || marketMode == "nfl") nflPicks.filter { it.values.isNotEmpty() } else emptyList()
-    val nflAll = if (marketMode == "nfl") nflPicks else emptyList()
-    // Props grouped per team, games in kickoff order, each side's strongest leans first.
-    val nflPropGroups = if (marketMode != "nfl") emptyList() else nflPicks.flatMap { pick ->
-        val leans = nfl?.props.orEmpty().filter { it.espnGame == pick.espnId }
-        listOf(pick.game.away to pick.game.home, pick.game.home to pick.game.away).mapNotNull { (team, opponent) ->
-            leans.filter { NflProps.playsFor(it.player, team.abbr) }.take(5).takeIf { it.isNotEmpty() }
-                ?.let { PropGroup(pick, team, opponent, it) }
-        }
-    }
-    val nflLocks = if (marketMode == "nfl") nflPicks.filter { it.tier != null }.sortedByDescending { it.winProb } else emptyList()
+    val nflValue = if (marketMode == "all") nflPicks.filter { it.values.isNotEmpty() } else emptyList()
     val nflFirst = live.isEmpty() && upcoming.isEmpty() && sortedRaces.isEmpty()
 
     LaunchedEffect(loading) {
@@ -115,6 +105,27 @@ fun BettingScreen(vm: AppViewModel) {
         }
     }
 
+    val marketChips: @Composable () -> Unit = {
+        FocusDimGroup {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(end = 64.dp),
+            ) {
+                item(key = "__all") { FilterChipText("All markets", marketMode == "all", onClick = { marketMode = "all" }) }
+                item(key = "__live") { FilterChipText("Live", marketMode == "live", onClick = { marketMode = "live" }) }
+                item(key = "__next") { FilterChipText("Pre-match", marketMode == "next", onClick = { marketMode = "next" }) }
+                item(key = "__racing") { FilterChipText("Racing", marketMode == "racing", onClick = { marketMode = "racing" }) }
+                item(key = "__nfl") { FilterChipText("NFL Picks", marketMode == "nfl", onClick = { marketMode = "nfl" }) }
+            }
+        }
+    }
+
+    if (marketMode == "nfl") {
+        Column(Modifier.fillMaxSize().padding(start = 16.dp, top = 18.dp, end = 42.dp, bottom = 26.dp)) {
+            marketChips()
+            NflHub(nfl, settings.use24h, onOpen = { gameSheet = it }, modifier = Modifier.weight(1f).padding(top = 14.dp))
+        }
+    } else
     FocusDimGroup {
         LazyColumn(
             Modifier.fillMaxSize(),
@@ -129,20 +140,7 @@ fun BettingScreen(vm: AppViewModel) {
                 BetStat("BOOKS", "${sortedRaces.sumOf { it.booksQuoting }}", "quoting", Edge.Accent2, Modifier.weight(1f))
             }
         }
-        item {
-            FocusDimGroup {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(end = 64.dp),
-                ) {
-                    item(key = "__all") { FilterChipText("All markets", marketMode == "all", onClick = { marketMode = "all" }) }
-                    item(key = "__live") { FilterChipText("Live", marketMode == "live", onClick = { marketMode = "live" }) }
-                    item(key = "__next") { FilterChipText("Pre-match", marketMode == "next", onClick = { marketMode = "next" }) }
-                    item(key = "__racing") { FilterChipText("Racing", marketMode == "racing", onClick = { marketMode = "racing" }) }
-                    item(key = "__nfl") { FilterChipText("NFL Picks", marketMode == "nfl", onClick = { marketMode = "nfl" }) }
-                }
-            }
-        }
+        item { marketChips() }
 
         if (loading && games.isEmpty() && races.isEmpty()) {
             item { Text("Loading markets…", style = MaterialTheme.typography.bodyLarge, color = Edge.Dim, modifier = Modifier.padding(top = 18.dp)) }
@@ -169,41 +167,10 @@ fun BettingScreen(vm: AppViewModel) {
                 ) { raceSheet = r }
             }
         }
-        if (nflLocks.isNotEmpty()) {
-            item { BetSection("NFL PICKS · LOCKS", "heavy favourites the model and market agree on") }
-            itemsIndexed(nflLocks, key = { _, p -> "nfl-lock:${p.game.id}" }) { i, p ->
-                NflPickRow(p, settings.use24h, if (i == 0 && nflFirst) firstRow else null, "betting:row|nfll:${p.game.id}") { gameSheet = p.game }
-            }
-        }
         if (nflValue.isNotEmpty()) {
             item { BetSection("NFL PICKS · VALUE", "rules that beat the closing line since 2006") }
             itemsIndexed(nflValue, key = { _, p -> "nfl-value:${p.game.id}" }) { i, p ->
-                NflPickRow(p, settings.use24h, if (i == 0 && nflFirst && nflLocks.isEmpty()) firstRow else null, "betting:row|nflv:${p.game.id}") { gameSheet = p.game }
-            }
-        }
-        if (nflAll.isNotEmpty()) {
-            item { BetSection("NFL PICKS · EVERY GAME", "model winner and confidence") }
-            itemsIndexed(nflAll, key = { _, p -> "nfl-all:${p.game.id}" }) { i, p ->
-                NflPickRow(p, settings.use24h, if (i == 0 && nflFirst && nflValue.isEmpty() && nflLocks.isEmpty()) firstRow else null, "betting:row|nfl:${p.game.id}") { gameSheet = p.game }
-            }
-        }
-        if (nflPropGroups.isNotEmpty()) {
-            item { BetSection("NFL PROPS · LEANS", "projection vs line · unvalidated, graded live") }
-            nflPropGroups.forEach { group ->
-                item(key = "nfl-prop-team:${group.pick.espnId}:${group.team.abbr}") { PropTeamHeader(group) }
-                itemsIndexed(group.leans, key = { _, l -> "nfl-prop:${l.espnGame}:${l.player.gsis}:${l.market}" }) { _, l ->
-                    PropRow(l, "betting:row|prop:${l.espnGame}:${l.player.gsis}:${l.market}") { gameSheet = group.pick.game }
-                }
-            }
-        }
-        if (marketMode == "nfl") {
-            val board = nfl
-            item {
-                if (board == null) {
-                    Text("Loading NFL model…", style = MaterialTheme.typography.bodyLarge, color = Edge.Dim, modifier = Modifier.padding(top = 18.dp))
-                } else {
-                    NflTrackRecord(board)
-                }
+                NflPickRow(p, settings.use24h, if (i == 0 && nflFirst) firstRow else null, "betting:row|nflv:${p.game.id}") { gameSheet = p.game }
             }
         }
         if (!loading && games.isEmpty() && sortedRaces.isEmpty()) {
@@ -550,100 +517,6 @@ private fun NflPickRow(pick: NflPicks.Pick, use24h: Boolean, focusRequester: Foc
                 else -> Pill("MODEL", color = Edge.Accent2)
             }
         }
-    }
-}
-
-private class PropGroup(val pick: NflPicks.Pick, val team: Sports.Team, val opponent: Sports.Team, val leans: List<NflProps.Lean>)
-
-@Composable
-private fun PropTeamHeader(group: PropGroup) {
-    val atHome = group.team.abbr == group.pick.game.home.abbr
-    Row(Modifier.fillMaxWidth().padding(top = 10.dp, start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        TeamLogo(group.team.logo, group.team.name, size = 34.dp)
-        Spacer(Modifier.width(12.dp))
-        Text(group.team.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.width(12.dp))
-        Text(
-            "${if (atHome) "vs" else "at"} ${group.opponent.name}",
-            style = MaterialTheme.typography.labelMedium, color = Edge.Faint,
-        )
-    }
-}
-
-@Composable
-private fun PropRow(lean: NflProps.Lean, memoryKey: String, onClick: () -> Unit) {
-    FocusSurface(
-        onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = EdgeShapes.Card,
-        focusScale = 1.01f, glow = false, memoryKey = memoryKey,
-    ) { focused ->
-        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "${lean.player.name}  ·  ${lean.player.position}", style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                    BetMini("MARKET", lean.market.label, Modifier.weight(1f))
-                    BetMini(
-                        "LINE",
-                        NflPicks.trim(lean.line) + (lean.open?.takeIf { it != lean.line }?.let { "  (open ${NflPicks.trim(it)})" } ?: ""),
-                        Modifier.weight(1.2f),
-                    )
-                    BetMini("PROJECTION", String.format(Locale.US, "%.1f", lean.projection.mean), Modifier.weight(1f))
-                    BetMini("LEAN", "${if (lean.over) "Over" else "Under"} ${pct(lean.confidence)}", Modifier.weight(1f))
-                }
-                Text(
-                    "${lean.projection.games} games · recency-weighted", style = MaterialTheme.typography.labelSmall,
-                    color = if (focused) Edge.Dim else Edge.Faint, modifier = Modifier.padding(top = 6.dp),
-                )
-            }
-            Pill("PROP", color = Edge.Accent2)
-        }
-    }
-}
-
-@Composable
-private fun NflTrackRecord(board: NflPicks.Board) {
-    val lines = buildList {
-        board.backtest?.let { b ->
-            add(
-                "Model, ${b.firstSeason}–${b.lastSeason} holdout: ${pct(b.winnerHitRate)} of winners over ${b.games} games · " +
-                    "Brier ${String.format(Locale.US, "%.3f", b.modelBrier)} vs market ${String.format(Locale.US, "%.3f", b.marketBrier)}. " +
-                    "Picks blend the rating with the market spread, which is the sharper forecaster.",
-            )
-        }
-        board.tiers.forEach { t ->
-            add(
-                "${t.tier.label} (pick ${pct(t.tier.floor)}+): won ${t.all.hitRate?.let(::pct) ?: "—"} since ${NflModel.LINES_FROM} (${t.all.graded}) · " +
-                    "${t.holdout.hitRate?.let(::pct) ?: "—"} since ${NflModel.HOLDOUT_FROM} (${t.holdout.graded}). Straight-up on heavy favourites, so the payout is small.",
-            )
-        }
-        board.rules.forEach { r ->
-            add(
-                "${r.rule.label} (${r.rule.detail}): ${r.all.hitRate?.let(::pct) ?: "—"} since ${NflModel.LINES_FROM} (${r.all.graded}) · " +
-                    "${r.holdout.hitRate?.let(::pct) ?: "—"} since ${NflModel.HOLDOUT_FROM} (${r.holdout.graded}). Break-even at -110 is 52.4%.",
-            )
-        }
-        val log = board.log
-        if (log.record.graded + log.record.pushes + log.open > 0) {
-            add(
-                "Logged picks: ${log.record.wins}-${log.record.losses}-${log.record.pushes}" +
-                    (log.avgClv?.let { " · closing line value ${if (it >= 0) "+" else ""}${String.format(Locale.US, "%.1f", it)} pts" } ?: "") +
-                    " · ${log.open} open",
-            )
-        }
-        board.propLog?.let { p ->
-            add(
-                "Props (projection vs line, no free line history to backtest, so graded live): " +
-                    "${p.record.wins}-${p.record.losses}-${p.record.pushes}" +
-                    (p.avgMove?.let { " · lines moved ${if (it >= 0) "+" else ""}${String.format(Locale.US, "%.1f", it)} toward the picks" } ?: "") +
-                    " · ${p.open} open. Prices aren't published; break-even at -110 is 52.4%.",
-            )
-        }
-        add("Data: nflverse schedules + player stats (CC-BY 4.0), ESPN lines and props, Open-Meteo wind.")
-    }
-    Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        lines.forEach { Text(it, style = MaterialTheme.typography.labelMedium, color = Edge.Dim) }
     }
 }
 
