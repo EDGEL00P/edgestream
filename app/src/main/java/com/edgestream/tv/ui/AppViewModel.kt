@@ -562,6 +562,7 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
     override fun onCleared() {
         alarmSound.stop(); secondPlayer?.release()
         if (com.edgestream.tv.remote.PhoneLink.answerer === questionAnswerer) com.edgestream.tv.remote.PhoneLink.answerer = null
+        if (com.edgestream.tv.remote.PhoneLink.lineup === channels) com.edgestream.tv.remote.PhoneLink.lineup = null
         super.onCleared()
     }
 
@@ -1281,7 +1282,10 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
     }
 
     private val questionAnswerer: suspend (com.edgestream.tv.remote.VoiceCommand) -> String = { answer(it) }
-    init { com.edgestream.tv.remote.PhoneLink.answerer = questionAnswerer }
+    init {
+        com.edgestream.tv.remote.PhoneLink.answerer = questionAnswerer
+        com.edgestream.tv.remote.PhoneLink.lineup = channels
+    }
 
     /**
      * A spoken question, answered from what the TV knows now; the answer also shows on the TV,

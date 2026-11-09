@@ -20,6 +20,9 @@ object PhoneLink {
     /** Answers spoken questions from the TV's live data; set by the app while its screen exists. */
     @Volatile var answerer: (suspend (VoiceCommand) -> String)? = null
 
+    /** The TV's own lineup (language-filtered, deduped, cleaned names); set by the app while its screen exists. */
+    @Volatile var lineup: StateFlow<List<com.edgestream.tv.data.db.ChannelEntity>>? = null
+
     sealed interface Command {
         /** An Android key code to deliver to the focused UI, as if pressed on the remote. */
         data class Key(val code: Int) : Command

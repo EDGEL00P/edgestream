@@ -7,6 +7,7 @@ import com.edgestream.tv.data.SourceInputParser
 import androidx.compose.ui.graphics.toArgb
 import com.edgestream.tv.data.db.SourceEntity
 import com.edgestream.tv.data.db.SourceType
+import com.edgestream.tv.data.db.ChannelEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -197,7 +198,8 @@ class CompanionServer(private val context: Context, private val repo: Repository
             }
             "POST /api/play" -> {
                 val key = body.optString("key")
-                val ch = runBlocking { repo.channels.first() }.firstOrNull { it.key == key }
+                // Same list the TV plays from, so "Playing" is never said for a channel it would ignore.
+                val ch = PhoneLink.lineup?.value?.firstOrNull { it.key == key }
                     ?: return error(404, "That channel isn't on the TV any more. Refresh the list.")
                 PhoneLink.post(PhoneLink.Command.Play(ch.key))
                 reply(200, JSONObject().put("ok", true).put("message", "Playing ${ch.name}"))
@@ -230,7 +232,7 @@ class CompanionServer(private val context: Context, private val repo: Repository
     }
 
     private fun channels(q: String): JSONArray = runBlocking {
-        val list = if (q.isBlank()) repo.channels.first().filter { !it.offline }.take(400) else repo.searchChannels(q)
+        val list = phoneChannels(PhoneLink.lineup?.value.orEmpty(), q)
         val epg = repo.nowAndNext()
         JSONArray(list.map { c ->
             JSONObject().put("key", c.key).put("name", c.name).put("number", com.edgestream.tv.data.ChannelNumbers.lcn(c)).put("group", c.groupName)
@@ -297,6 +299,16 @@ class CompanionServer(private val context: Context, private val repo: Repository
         private val OK get() = JSONObject().put("ok", true)
         private const val RESCAN = "Scan the QR code on the TV to send text securely."
         private const val MAX_QUEUED = 24
+
+        /** The phone's channel list: the TV's lineup, in channel-number order, filtered by name. */
+        internal fun phoneChannels(lineup: List<ChannelEntity>, q: String): List<ChannelEntity> {
+            val query = q.trim()
+            return lineup.asSequence()
+                .filter { !it.offline && (query.isEmpty() || it.name.contains(query, ignoreCase = true)) }
+                .sortedBy { com.edgestream.tv.data.ChannelNumbers.lcn(it) }
+                .take(if (query.isEmpty()) 400 else 200)
+                .toList()
+        }
 
         private val KEYS = buildMap {
             put("up", KeyEvent.KEYCODE_DPAD_UP); put("down", KeyEvent.KEYCODE_DPAD_DOWN)
