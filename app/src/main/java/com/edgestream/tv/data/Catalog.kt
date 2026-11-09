@@ -74,6 +74,44 @@ object Catalog {
         runCatching { parse(shelf, raw) }.getOrDefault(emptyList())
     }
 
+    /**
+     * Regional Discover: what's popular in the viewer's region, narrowed by original language
+     * and a certification ceiling. Uses the v4 read token as a Bearer header when saved,
+     * otherwise the v3 key in the query. Cached for six hours like the other TMDB rows.
+     */
+    suspend fun discover(
+        movies: Boolean, apiKey: String, readToken: String,
+        region: String, language: String, certification: String, cacheDir: File,
+    ): List<Title> = withContext(Dispatchers.IO) {
+        val reg = region.uppercase().takeIf { it.length == 2 } ?: return@withContext emptyList()
+        if (readToken.isBlank() && apiKey.isBlank()) return@withContext emptyList()
+        val q = buildList {
+            if (readToken.isBlank()) add("api_key=${enc(apiKey)}")
+            add("sort_by=popularity.desc")
+            add("region=$reg")
+            if (language.isNotBlank()) add("with_original_language=$language")
+            if (certification.isNotBlank()) {
+                add("certification_country=$reg")
+                add("certification.lte=${enc(certification)}")
+            }
+        }.joinToString("&")
+        val id = "regional_${if (movies) "movie" else "tv"}_${reg}_${language}_${certification}"
+        val file = File(cacheDir, "catalog_$id.json")
+        val fresh = file.exists() && System.currentTimeMillis() - file.lastModified() < TTL_MS
+        val raw = runCatching {
+            if (fresh) file.readText()
+            else {
+                val b = Request.Builder().url("$TMDB/discover/${if (movies) "movie" else "tv"}?$q")
+                if (readToken.isNotBlank()) b.header("Authorization", "Bearer $readToken")
+                Http.client.newCall(b.build()).execute().use { r ->
+                    if (!r.isSuccessful) throw HttpStatusException(r.code, "HTTP ${r.code}")
+                    r.body.string()
+                }.also { file.writeText(it) }
+            }
+        }.getOrElse { runCatching { file.readText() }.getOrNull() } ?: return@withContext emptyList()
+        runCatching { parseTmdbResults(JSONObject(raw), movies) }.getOrDefault(emptyList())
+    }
+
     /** Any title by name from the universal catalogue (not just the provider's list); never cached. */
     suspend fun search(query: String, movies: Boolean): List<Title> = withContext(Dispatchers.IO) {
         val t = if (movies) "movie" else "series"

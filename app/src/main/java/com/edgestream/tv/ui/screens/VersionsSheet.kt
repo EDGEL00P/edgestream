@@ -53,7 +53,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 @Composable
 fun VersionsSheet(vm: AppViewModel, sheet: AppViewModel.VersionSheet) {
     val streamBadges by androidx.compose.runtime.produceState(com.edgestream.tv.data.StreamBadges.NONE) {
-        value = com.edgestream.tv.data.StreamBadges.load(com.edgestream.tv.EdgeStreamApp.instance.cacheDir)
+        val cfg = com.edgestream.tv.data.StreamBadges.config(vm.settings.value, vm.countryCode)
+        value = com.edgestream.tv.data.StreamBadges.load(
+            com.edgestream.tv.EdgeStreamApp.instance.cacheDir, cfg.url, cfg.extras,
+        )
     }
     BackHandler { vm.versionSheet.value = null }
     val first = remember { FocusRequester() }
@@ -152,7 +155,10 @@ private fun VersionRow(
                     badges.take(5).forEach { Pill(it, color = if (it == "Best match" || it == "Ready") Edge.Accent else Edge.PanelHi.copy(alpha = 1f)) }
                 }
                 if (images.isNotEmpty()) Row(Modifier.padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    images.forEach { b -> coil3.compose.AsyncImage(b.image, b.name, Modifier.height(24.dp), contentScale = androidx.compose.ui.layout.ContentScale.FillHeight) }
+                    images.forEach { b ->
+                        if (b.image.isEmpty()) Pill(b.name, color = com.edgestream.tv.ui.Edge.Accent)
+                        else coil3.compose.AsyncImage(b.image, b.name, Modifier.height(24.dp), contentScale = androidx.compose.ui.layout.ContentScale.FillHeight)
+                    }
                 }
                 Text(title, style = MaterialTheme.typography.titleMedium, color = Edge.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (details.isNotBlank()) Text(details, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)

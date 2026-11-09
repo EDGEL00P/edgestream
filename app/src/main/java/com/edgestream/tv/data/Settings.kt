@@ -38,6 +38,8 @@ data class AppSettings(
     val englishOnly: Boolean = true,
     /** Free personal key from themoviedb.org; enables film/series backdrops, cast and ratings. */
     val tmdbApiKey: String = "",
+    /** TMDB v4 API Read Access Token; when set it is used as a Bearer token instead of the v3 key. */
+    val tmdbReadToken: String = "",
     /** Google Gemini (free tier): understands commands the built-in rules can't. */
     val geminiApiKey: String = "",
     /** The viewer's own Trakt app (trakt.tv/oauth/applications) and Simkl app (simkl.com/settings/developer). */
@@ -93,6 +95,16 @@ data class AppSettings(
     val autoNextEpisode: Boolean = true,
     /** Use TheIntroDB community intro/recap/credits/preview timestamps when an external id is known. */
     val useIntroDb: Boolean = true,
+    /** Badge art: "gold", "elite", "nuvio" or "off". */
+    val badgePack: String = "gold",
+    /** ISO 3166-1 alpha-2 region for regional TMDB discovery and the region badge; blank = device country. */
+    val contentRegion: String = "",
+    /** ISO 639-1 language for discovery and the language badge; blank = the audio language. */
+    val contentLanguage: String = "",
+    /** Certification ceiling shown as a badge and applied to discovery (e.g. "MA15+"); blank = off. */
+    val contentCertification: String = "",
+    /** Stremio metadata addon manifest URL; blank = Cinemeta/TMDB metadata. Runtime-only, never bundled. */
+    val metadataAddon: String = "",
 )
 
 class Settings(context: Context) {
@@ -128,6 +140,7 @@ class Settings(context: Context) {
         hiddenGroups = prefs.getStringSet("hiddenGroups", null)?.toSet().orEmpty(),
         englishOnly = prefs.getBoolean("englishOnly", true),
         tmdbApiKey = Secrets.openOrBlank(prefs.getString("tmdbKey", "") ?: ""),
+        tmdbReadToken = Secrets.openOrBlank(prefs.getString("tmdbToken", "") ?: ""),
         geminiApiKey = Secrets.openOrBlank(prefs.getString("geminiKey", "") ?: ""),
         traktClientId = Secrets.openOrBlank(prefs.getString("traktId", "") ?: ""),
         traktClientSecret = Secrets.openOrBlank(prefs.getString("traktSecret", "") ?: ""),
@@ -159,6 +172,11 @@ class Settings(context: Context) {
         uiSounds = prefs.getBoolean("uiSounds", true),
         autoNextEpisode = prefs.getBoolean("autoNext", true),
         useIntroDb = prefs.getBoolean("useIntroDb", true),
+        badgePack = prefs.getString("badgePack", "gold") ?: "gold",
+        contentRegion = prefs.getString("contentRegion", "") ?: "",
+        contentLanguage = prefs.getString("contentLanguage", "") ?: "",
+        contentCertification = prefs.getString("contentCertification", "") ?: "",
+        metadataAddon = Secrets.openOrBlank(prefs.getString("metadataAddon", "") ?: ""),
     )
 
     fun update(transform: (AppSettings) -> AppSettings) {
@@ -185,6 +203,7 @@ class Settings(context: Context) {
             .putStringSet("hiddenGroups", s.hiddenGroups)
             .putBoolean("englishOnly", s.englishOnly)
             .putString("tmdbKey", Secrets.seal(s.tmdbApiKey))
+            .putString("tmdbToken", Secrets.seal(s.tmdbReadToken))
             .putString("geminiKey", Secrets.seal(s.geminiApiKey))
             .putString("traktId", Secrets.seal(s.traktClientId))
             .putString("traktSecret", Secrets.seal(s.traktClientSecret))
@@ -215,6 +234,11 @@ class Settings(context: Context) {
             .putBoolean("uiSounds", s.uiSounds)
             .putBoolean("autoNext", s.autoNextEpisode)
             .putBoolean("useIntroDb", s.useIntroDb)
+            .putString("badgePack", s.badgePack)
+            .putString("contentRegion", s.contentRegion)
+            .putString("contentLanguage", s.contentLanguage)
+            .putString("contentCertification", s.contentCertification)
+            .putString("metadataAddon", Secrets.seal(s.metadataAddon))
             .apply()
         Http.userAgent = s.userAgent
         state.value = s

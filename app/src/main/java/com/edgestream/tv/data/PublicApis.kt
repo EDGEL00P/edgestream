@@ -136,6 +136,29 @@ object PublicApis {
         json.optJSONObject("externals")?.optString("imdb")?.takeIf { it.startsWith("tt") }
     }.getOrNull()
 
+    /**
+     * Metadata from a Stremio metadata addon (e.g. AIOMetadata) when the viewer configured its
+     * manifest URL. Fills gaps left by the catalogue/TMDB; the URL is runtime-only, never bundled.
+     */
+    fun stremioMeta(manifest: String, imdbId: String?, isSeries: Boolean): Meta? = runCatching {
+        val id = imdbId?.takeIf { it.startsWith("tt") } ?: return null
+        val base = manifest.trim().removeSuffix("/manifest.json").removeSuffix("/")
+        if (base.isBlank()) return null
+        val j = getJson("$base/meta/${if (isSeries) "series" else "movie"}/$id.json") as? JSONObject ?: return null
+        val m = j.optJSONObject("meta") ?: return null
+        Meta(
+            plot = m.optString("description").ifEmpty { null },
+            poster = m.optString("poster").ifEmpty { null },
+            backdrop = m.optString("background").ifEmpty { null },
+            genre = m.optJSONArray("genres")?.let { a ->
+                (0 until a.length()).joinToString(", ") { a.optString(it) }
+            }?.ifEmpty { null },
+            rating = m.optString("imdbRating").ifEmpty { null },
+            year = m.optString("year").ifEmpty { null },
+            credit = "Metadata addon",
+        )
+    }.getOrNull()
+
     fun tvMazeShow(title: String): Meta? = runCatching {
         val json = getJson("https://api.tvmaze.com/singlesearch/shows?q=${enc(cleanTitle(title))}") as? JSONObject ?: return null
         Meta(

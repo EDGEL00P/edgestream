@@ -8,29 +8,69 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
-/**
- * The viewer's stream badges: a JSON badge set hosted on GitHub with one regex per badge
- * (4K, Dolby Vision, Atmos, Remux…). Read live from the repository and cached locally; the
- * cache only ever holds a validated file, written atomically, and a bad update never
- * displaces the last good set.
- */
-class StreamBadges internal constructor(private val filters: List<Filter>) {
+/** The badge packs the viewer can pick in Settings. All are runtime URLs, never bundled art. */
+object BadgePacks {
+    const val GOLD = "https://raw.githubusercontent.com/djgenesis/stream/refs/heads/main/gold_badges_complete.json"
+    const val ELITE = "https://raw.githubusercontent.com/leonevz/Elite-Badges/main/badges.json"
+    const val NUVIO = "https://raw.githubusercontent.com/EDGEL00P/nuvio-badges/main/badges.json"
+    val choices = listOf("gold" to "Gold", "elite" to "Elite", "nuvio" to "Nuvio", "off" to "Off")
 
+    fun url(pack: String): String? = when (pack) {
+        "gold" -> GOLD
+        "elite" -> ELITE
+        "nuvio" -> NUVIO
+        else -> null
+    }
+
+    fun label(pack: String): String = choices.firstOrNull { it.first == pack }?.second ?: "Off"
+}
+
+/**
+ * A JSON badge set hosted on GitHub with one regex per badge (4K, Dolby Vision, Atmos…).
+ * The cache only ever holds a validated file, written atomically, and a bad update never
+ * displaces the last good set. Local text badges (region, language, certification) are
+ * appended so they appear on every stream even when the pack fails to load.
+ */
+class StreamBadges internal constructor(
+    private val filters: List<Filter>,
+    private val extras: List<Badge> = emptyList(),
+) {
+    /** [image] blank means a text pill rather than a remote PNG. */
     data class Badge(val name: String, val image: String)
     internal data class Filter(val order: Int, val pattern: Regex, val badge: Badge)
 
     internal fun isEmpty() = filters.isEmpty()
 
-    /** Badges for one stream, in the file's group order, at most [limit]. */
     fun match(text: String, limit: Int = 8): List<Badge> =
-        filters.asSequence().filter { it.pattern.containsMatchIn(text) }.map { it.badge }.distinctBy { it.image }.take(limit).toList()
+        (filters.asSequence().filter { it.pattern.containsMatchIn(text) }.map { it.badge } + extras.asSequence())
+            .distinctBy { if (it.image.isEmpty()) it.name else it.image }
+            .take(limit).toList()
+
+    fun withExtras(list: List<Badge>) = StreamBadges(filters, list)
+
+    /** The pack URL and local badges for the current viewer; one home for both screens. */
+    data class Config(val url: String?, val extras: List<Badge>)
 
     companion object {
-        const val URL = "https://raw.githubusercontent.com/leonevz/Elite-Badges/main/badges.json"
+        /** @Deprecated use [BadgePacks.GOLD]; kept for one release of call-site compatibility. */
+        const val URL = BadgePacks.GOLD
         private const val TTL_MS = 24 * 60 * 60 * 1000L
-        /** Tagged by source, so switching badge sets never serves the old set from cache. */
-        internal val CACHE_FILE = "badges-" + Integer.toHexString(URL.hashCode()) + ".json"
         val NONE = StreamBadges(emptyList())
+
+        internal fun cacheFile(url: String) = "badges-" + Integer.toHexString(url.hashCode()) + ".json"
+
+        fun config(s: AppSettings, countryCode: String?): Config {
+            val region = s.contentRegion.ifBlank { countryCode ?: "AU" }.uppercase()
+            val language = s.contentLanguage.ifBlank { s.audioLanguage.ifBlank { "en" } }
+            return Config(BadgePacks.url(s.badgePack), regionBadges(region, language, s.contentCertification))
+        }
+
+        /** Locally-defined badges for the viewer's region, language and certification ceiling. */
+        fun regionBadges(region: String, language: String, certification: String): List<Badge> = buildList {
+            if (language.isNotBlank()) add(Badge(language.uppercase(), ""))
+            if (region.isNotBlank()) add(Badge(region.uppercase(), ""))
+            if (certification.isNotBlank()) add(Badge(certification.uppercase(), ""))
+        }
 
         /** Real playback metadata -> text the release patterns can match. */
         fun describe(videoInfo: String, videoHeight: Int, audio: List<String>): String = buildList {
@@ -44,13 +84,18 @@ class StreamBadges internal constructor(private val filters: List<Filter>) {
             addAll(audio)
         }.joinToString(" ")
 
-        suspend fun load(cacheDir: File): StreamBadges = withContext(Dispatchers.IO) {
-            val file = File(cacheDir, CACHE_FILE)
+        suspend fun load(
+            cacheDir: File,
+            url: String? = BadgePacks.GOLD,
+            extras: List<Badge> = emptyList(),
+        ): StreamBadges = withContext(Dispatchers.IO) {
+            if (url == null) return@withContext NONE.withExtras(extras)
+            val file = File(cacheDir, cacheFile(url))
             val cachedRaw = runCatching { file.readText() }.getOrNull()
             val fresh = cachedRaw?.let(::parseOrNull) != null &&
                 System.currentTimeMillis() - file.lastModified() < TTL_MS
             val downloaded = if (fresh) null else runCatching {
-                Http.client.newCall(Request.Builder().url(URL).build()).execute().use { r ->
+                Http.client.newCall(Request.Builder().url(url).build()).execute().use { r ->
                     if (!r.isSuccessful) throw HttpStatusException(r.code, "HTTP ${r.code}")
                     r.body.string()
                 }
@@ -59,14 +104,14 @@ class StreamBadges internal constructor(private val filters: List<Filter>) {
             val (badges, commit) = resolve(cachedRaw, downloaded)
             if (commit != null) {
                 // Unique temp: the player and the versions sheet can load at the same time.
-                val tmp = File.createTempFile(CACHE_FILE, ".tmp", cacheDir)
+                val tmp = File.createTempFile(cacheFile(url), ".tmp", cacheDir)
                 runCatching {
                     tmp.writeText(commit)
                     Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
                     file.setLastModified(System.currentTimeMillis())
                 }.onFailure { tmp.delete() }
             }
-            badges
+            badges.withExtras(extras)
         }
 
         /** Pure: which set to use, and which raw text (if any) is safe to commit to disk. */
@@ -90,7 +135,6 @@ class StreamBadges internal constructor(private val filters: List<Filter>) {
                 val f = list.optJSONObject(i) ?: return@mapNotNull null
                 if (!f.optBoolean("isEnabled", true) || f.optString("type", "filter") != "filter") return@mapNotNull null
                 val image = f.optString("imageURL").ifBlank { return@mapNotNull null }
-                // One malformed pattern skips that badge, never the whole set.
                 val pattern = runCatching { Regex(f.optString("pattern")) }.getOrNull() ?: return@mapNotNull null
                 Filter(order[f.optString("groupId")] ?: Int.MAX_VALUE, pattern, Badge(f.optString("name"), image))
             }.sortedBy { it.order }

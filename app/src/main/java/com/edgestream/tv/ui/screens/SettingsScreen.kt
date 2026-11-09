@@ -457,13 +457,26 @@ private fun SettingsPageContent(vm: AppViewModel, page: SettingsPage) {
             }
 
             SettingsPage.EXTRAS -> {
-                item { PanelSection("Artwork & Voice") }
+                // Keys grouped by what they feed, so the page reads as a list of services
+                // instead of one long wall of password boxes.
+                val regions = listOf("", "AU", "US", "GB", "IN", "JP", "KR", "FR", "DE", "BR", "ES", "IT", "MX")
+                val languages = listOf("", "en", "fr", "de", "es", "ja", "ko", "hi", "pt", "it", "zh", "ar", "tr")
+                val certs = listOf("", "G", "PG", "M", "MA15+", "R18+")
+                item { PanelSection("Metadata") }
                 item {
-                    SecureApiKeyField("TMDB", "Posters, backdrops, cast and ratings for films and series. Free key at themoviedb.org.", s.tmdbApiKey) { key -> set { it.copy(tmdbApiKey = key) } }
+                    SecureApiKeyField("TMDB API Key", "v3 key from themoviedb.org; posters, backdrops, cast and ratings.", s.tmdbApiKey) { key -> set { it.copy(tmdbApiKey = key) } }
                 }
                 item {
-                    SecureApiKeyField("Gemini", "Understands voice and typed commands the built-in rules can't, like “put the Chiefs game on”. Free key at aistudio.google.com. Only the command is sent.", s.geminiApiKey) { key -> set { it.copy(geminiApiKey = key) } }
+                    SecureApiKeyField("TMDB Read Token", "v4 API Read Access Token. Used as a Bearer token when set; otherwise the v3 key.", s.tmdbReadToken) { key -> set { it.copy(tmdbReadToken = key) } }
                 }
+                item {
+                    SecureApiKeyField("Metadata Addon", "Stremio metadata addon manifest URL (e.g. AIOMetadata). Stored encrypted on this TV.", s.metadataAddon) { key -> set { it.copy(metadataAddon = key) } }
+                }
+
+                item { PanelSection("Streams & Add-ons") }
+                item { SecureApiKeyField("Debrid Service", "Your debrid cloud: cached films and episodes. Key at torbox.app › Settings › API.", s.torboxApiKey) { key -> set { it.copy(torboxApiKey = key) } } }
+                item { StreamAddonsCard(vm, s.streamAddons) { list -> set { st -> st.copy(streamAddons = list) } } }
+
                 item { PanelSection("Watch Tracking") }
                 item {
                     SecureApiKeyField("Trakt Client ID", "Create an app at trakt.tv/oauth/applications (redirect URI urn:ietf:wg:oauth:2.0:oob) and paste its Client ID.", s.traktClientId) { key -> set { it.copy(traktClientId = key) } }
@@ -471,15 +484,44 @@ private fun SettingsPageContent(vm: AppViewModel, page: SettingsPage) {
                 item { SecureApiKeyField("Trakt Client Secret", "The same Trakt app's Client Secret.", s.traktClientSecret) { key -> set { it.copy(traktClientSecret = key) } } }
                 item { SecureApiKeyField("Simkl Client ID", "Create an app at simkl.com/settings/developer and paste its Client ID.", s.simklClientId) { key -> set { it.copy(simklClientId = key) } } }
                 item { TrackingLinks(s) }
-                item { PanelSection("Debrid") }
-                item { SecureApiKeyField("Debrid Service", "Your debrid cloud: cached films and episodes. Key at torbox.app › Settings › API.", s.torboxApiKey) { key -> set { it.copy(torboxApiKey = key) } } }
-                item { StreamAddonsCard(vm, s.streamAddons) { list -> set { st -> st.copy(streamAddons = list) } } }
+
+                item { PanelSection("Voice & AI") }
+                item {
+                    SecureApiKeyField("Gemini", "Understands voice and typed commands the built-in rules can't, like “put the Chiefs game on”. Free key at aistudio.google.com. Only the command is sent.", s.geminiApiKey) { key -> set { it.copy(geminiApiKey = key) } }
+                }
+
                 item { PanelSection("Lightning") }
                 item {
                     SecureApiKeyField("Xweather Client ID", "Measured lightning strikes on Radar (15,000 a month free at xweather.com). Without it, Radar shows storm risk from the forecast.", s.xweatherClientId) { key -> set { it.copy(xweatherClientId = key) } }
                 }
                 item {
                     SecureApiKeyField("Xweather Secret", "Paired with the Client ID. Both are at data.portal.xweather.com/account/keys; the namespace must be com.edgestream.tv.", s.xweatherSecret) { key -> set { it.copy(xweatherSecret = key) } }
+                }
+
+                item { PanelSection("Badges & Region") }
+                item {
+                    Cycle("Badge Pack", com.edgestream.tv.data.BadgePacks.label(s.badgePack),
+                        "Gold, Elite, your Nuvio set, or off. Shown in the player and the source list.") {
+                        set { it.copy(badgePack = next(com.edgestream.tv.data.BadgePacks.choices.map { c -> c.first }, it.badgePack)) }
+                    }
+                }
+                item {
+                    Cycle("Region", s.contentRegion.ifBlank { vm.countryCode ?: "Auto" }.uppercase(),
+                        "ISO 3166-1 region for TMDB discovery and the region badge; Auto uses the device country.") {
+                        set { it.copy(contentRegion = next(regions, it.contentRegion)) }
+                    }
+                }
+                item {
+                    Cycle("Language", s.contentLanguage.ifBlank { s.audioLanguage.ifBlank { "en" } }.uppercase(),
+                        "ISO 639-1 language for discovery and the language badge.") {
+                        set { it.copy(contentLanguage = next(languages, it.contentLanguage)) }
+                    }
+                }
+                item {
+                    Cycle("Certification", s.contentCertification.ifBlank { "Off" },
+                        "Ceiling for regional discovery and a badge on every stream (AU classifications).") {
+                        set { it.copy(contentCertification = next(certs, it.contentCertification)) }
+                    }
                 }
             }
 

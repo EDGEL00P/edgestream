@@ -37,10 +37,23 @@ data class BrowsePage(
 object BrowseData {
 
     suspend fun load(vm: AppViewModel, kind: VodKind): BrowsePage = coroutineScope {
-        val key = vm.settings.value.tmdbApiKey
+        val s = vm.settings.value
+        val key = s.tmdbApiKey
+        val token = s.tmdbReadToken
         val region = vm.countryCode
-        val shelves = Catalog.shelves(movies = kind == VodKind.MOVIE, tmdbKey = key.isNotBlank())
+        val shelves = Catalog.shelves(movies = kind == VodKind.MOVIE, tmdbKey = key.isNotBlank() || token.isNotBlank())
         val cache = com.edgestream.tv.EdgeStreamApp.instance.cacheDir
+        // One regional Discover row, driven by the viewer's region/language/certification.
+        val targetRegion = s.contentRegion.ifBlank { region.orEmpty() }
+        val regional = if (targetRegion.isBlank() || (key.isBlank() && token.isBlank())) null else async {
+            BrowseShelf(
+                "Popular in ${targetRegion.uppercase()}",
+                Catalog.discover(
+                    kind == VodKind.MOVIE, key, token, targetRegion,
+                    s.contentLanguage, s.contentCertification, cache,
+                ).map(::item),
+            )
+        }
         val servers = async {
             com.edgestream.tv.data.MediaServers.rows(kind == VodKind.MOVIE).map { r ->
                 BrowseShelf(r.title, r.items.map { t -> BrowseItem("imdb:${t.imdbId}", t.name, t.year, t.poster, t.backdrop, t.overview, null, null, vodKey = null, imdbId = t.imdbId) })
@@ -65,7 +78,7 @@ object BrowseData {
         BrowsePage(
             marquee = marquee.filter { it.backdrop != null }.distinctBy { it.id }.take(10),
             // The viewer's own servers lead: their Continue Watching is the most personal row.
-            shelves = servers.await() + curated,
+            shelves = servers.await() + listOfNotNull(regional?.await()?.takeIf { it.items.isNotEmpty() }) + curated,
             // The viewer's own collections replace the built-in ones when they load.
             catalogCollections = if (key.isBlank() || groups.isNotEmpty()) emptyList()
             else Catalog.collections(movies, region).groupBy { it.group }.toList(),

@@ -890,7 +890,9 @@ class Repository(
         metaCache[item.key]?.let { return@withContext it }
         val isSeries = item.kind == VodKind.SERIES
         val stored = PublicApis.Meta(plot = item.plot, rating = item.rating, year = item.year)
-        var meta = stored.orElse(catalogueMeta(item)).orElse(catalogueSeeds[item.key]).orElse(PublicApis.tmdb(settings.value.tmdbApiKey, item.name, isSeries, item.year))
+        var meta = stored.orElse(catalogueMeta(item)).orElse(catalogueSeeds[item.key])
+            .orElse(PublicApis.tmdb(settings.value.tmdbApiKey, item.name, isSeries, item.year))
+            .orElse(PublicApis.stremioMeta(settings.value.metadataAddon, imdbOf(item), isSeries))
         if (isSeries && (meta.plot == null || meta.genre == null)) meta = meta.orElse(PublicApis.tvMazeShow(item.name))
         metaCache[item.key] = meta
         meta

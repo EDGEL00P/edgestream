@@ -123,8 +123,14 @@ fun PlayerScreen(vm: AppViewModel) {
 
     // One badge set for the whole player: match the release name when there is one, plus the
     // real video/audio tracks, so the strip reflects whatever is actually playing.
-    val badgeSet by produceState(com.edgestream.tv.data.StreamBadges.NONE) {
-        value = com.edgestream.tv.data.StreamBadges.load(com.edgestream.tv.EdgeStreamApp.instance.cacheDir)
+    val badgeConfig = remember(
+        settings.badgePack, settings.contentRegion, settings.contentLanguage,
+        settings.contentCertification, settings.audioLanguage, vm.countryCode,
+    ) { com.edgestream.tv.data.StreamBadges.config(settings, vm.countryCode) }
+    val badgeSet by produceState(com.edgestream.tv.data.StreamBadges.NONE, badgeConfig) {
+        value = com.edgestream.tv.data.StreamBadges.load(
+            com.edgestream.tv.EdgeStreamApp.instance.cacheDir, badgeConfig.url, badgeConfig.extras,
+        )
     }
     val badges = remember(badgeSet, np, st.videoInfo, st.videoHeight, st.audio) {
         val head = when (val p = np) {
@@ -675,7 +681,8 @@ private fun NowInfo(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         badges.forEach { b ->
-            AsyncImage(b.image, b.name, Modifier.height(28.dp), contentScale = ContentScale.FillHeight)
+            if (b.image.isEmpty()) Pill(b.name, color = Edge.Accent)
+            else AsyncImage(b.image, b.name, Modifier.height(28.dp), contentScale = ContentScale.FillHeight)
         }
     }
     when (np) {

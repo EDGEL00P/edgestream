@@ -67,10 +67,23 @@ class StreamBadgesTest {
         assertEquals("DTS-HD", b.match("Movie DTS-HD").single().name)
     }
 
+    @Test fun packsHaveDistinctCachesAndOffLoadsNothing() {
+        assertTrue(BadgePacks.url("gold") != null)
+        assertTrue(BadgePacks.url("elite") != null)
+        assertTrue(BadgePacks.url("off") == null)
+        assertTrue(StreamBadges.cacheFile(BadgePacks.GOLD) != StreamBadges.cacheFile(BadgePacks.ELITE))
+    }
+
+    @Test fun regionLanguageAndCertificationAlwaysShow() {
+        val extras = StreamBadges.regionBadges("AU", "en", "MA15+")
+        val b = StreamBadges.NONE.withExtras(extras)
+        assertEquals(listOf("EN", "AU", "MA15+"), b.match("any stream").map { it.name })
+    }
+
     @Test fun freshCacheIsUsedWithoutANetworkCall() {
         kotlinx.coroutines.runBlocking {
             val dir = Files.createTempDirectory("badges").toFile()
-            val file = File(dir, StreamBadges.CACHE_FILE)
+            val file = File(dir, StreamBadges.cacheFile(BadgePacks.GOLD))
             file.writeText(elite)
             file.setLastModified(System.currentTimeMillis())
             val b = StreamBadges.load(dir)
