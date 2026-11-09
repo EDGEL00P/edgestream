@@ -92,10 +92,25 @@ class MainActivity : ComponentActivity() {
         if (uri.scheme == com.edgestream.tv.launcher.Links.SCHEME) com.edgestream.tv.ui.LauncherLinks.pending.value = uri
     }
 
-    private fun pressKey(code: Int) {
-        val now = android.os.SystemClock.uptimeMillis()
-        dispatchKeyEvent(android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_DOWN, code, 0))
-        dispatchKeyEvent(android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_UP, code, 0))
+    /**
+     * Injected through the input pipeline, not dispatched to this activity, so the key reaches
+     * whichever of our windows has focus: dialogs are separate windows the activity never sees.
+     * Android allows injecting into the app's own windows without INJECT_EVENTS; the call blocks
+     * until the key is handled, so it runs off the main thread (the collector keeps keys in order).
+     */
+    private suspend fun pressKey(code: Int) {
+        val injected = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                android.app.Instrumentation().sendKeyDownUpSync(code); true
+            } catch (_: SecurityException) {
+                false // focus is on another app's window (a system dialog); fall back to this activity
+            }
+        }
+        if (!injected) {
+            val now = android.os.SystemClock.uptimeMillis()
+            dispatchKeyEvent(android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_DOWN, code, 0))
+            dispatchKeyEvent(android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_UP, code, 0))
+        }
     }
 
     /** Turns text into key events the focused field understands; characters the keymap can't type are skipped. */
