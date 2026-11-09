@@ -170,7 +170,7 @@ private fun TimeTile(clock: Long, use24h: Boolean, w: PublicApis.WeatherDetail?,
             // Now — the only place the current temperature appears (the forecast lives in Weather).
             if (w != null) {
                 Text("   ${temp(w.tempC, f)}  ${w.city}", color = Edge.Text.copy(alpha = 0.75f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                WeatherGlyph(w.code, glyphSize = 14.dp, modifier = Modifier.padding(start = 6.dp), night = com.edgestream.tv.ui.components.isNightNow())
+                WeatherGlyph(w.code, glyphSize = 14.dp, modifier = Modifier.padding(start = 6.dp), night = !w.isDay)
             }
         }
     }
@@ -284,7 +284,7 @@ private fun GameSpot(g: Sports.Game, use24h: Boolean, fahrenheit: Boolean, previ
             ).joinToString("  ·  ")
             if (place.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(place, color = Edge.Text.copy(alpha = 0.8f), fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                venueWeather?.takeIf { !it.indoor }?.let { WeatherGlyph(it.code, glyphSize = 18.dp, modifier = Modifier.padding(start = 8.dp)) }
+                venueWeather?.takeIf { !it.indoor }?.let { WeatherGlyph(it.code, glyphSize = 18.dp, modifier = Modifier.padding(start = 8.dp), night = !it.isDay) }
             }
             ScoreBug(g, use24h, latestPlay, big, Modifier.padding(top = 6.dp))
             if (homeChance != null) Column(Modifier.padding(top = 8.dp).width(SCORE_BUG_WIDTH * big)) {
@@ -460,7 +460,7 @@ private fun ResumeSpot(p: com.edgestream.tv.data.db.ProgressEntity, modifier: Mo
 
 private const val HERO_TURN_MS = 8_000L
 
-private data class VenueWeather(val indoor: Boolean, val tempC: Double, val code: Int) {
+private data class VenueWeather(val indoor: Boolean, val tempC: Double, val code: Int, val isDay: Boolean = true) {
     val description: String get() = PublicApis.Weather("", tempC, code).description
 }
 
@@ -472,7 +472,7 @@ private suspend fun venueWeatherOf(g: Sports.Game): VenueWeather? {
     val city = g.venueCity ?: return null
     return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val loc = PublicApis.geocode(listOfNotNull(city, g.venueCountry).joinToString(", ")) ?: PublicApis.geocode(city)
-        loc?.let { PublicApis.weather(it) }?.let { VenueWeather(false, it.tempC, it.code) }
+        loc?.let { PublicApis.weather(it) }?.let { VenueWeather(false, it.tempC, it.code, it.isDay) }
     }?.also { VENUE_WEATHER[g.id] = it }
 }
 
@@ -482,7 +482,7 @@ private fun ForecastSpot(w: PublicApis.WeatherDetail, fahrenheit: Boolean, modif
     Row(modifier.padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                WeatherGlyph(w.code, glyphSize = 40.dp, night = com.edgestream.tv.ui.components.isNightNow())
+                WeatherGlyph(w.code, glyphSize = 40.dp, night = !w.isDay)
                 Text(w.city.uppercase(), color = Edge.Text, fontSize = 48.sp, lineHeight = 52.sp, fontWeight = FontWeight.Black, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 14.dp))
             }

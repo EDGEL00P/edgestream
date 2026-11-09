@@ -198,7 +198,8 @@ object PublicApis {
 
     /** [region] is the ISO 3166-2 subdivision suffix ("QLD") when known; used for state holidays. */
     data class Location(val city: String, val countryCode: String, val lat: Double, val lon: Double, val region: String? = null)
-    data class Weather(val city: String, val tempC: Double, val code: Int) {
+    /** [isDay] is day or night at the place itself (Open-Meteo is_day), not on the TV's clock. */
+    data class Weather(val city: String, val tempC: Double, val code: Int, val isDay: Boolean = true) {
         val icon: String get() = when (code) {
             0 -> "☀"; 1, 2 -> "⛅"; 3 -> "☁"; 45, 48 -> "🌫"; in 51..67, in 80..82 -> "🌧"
             in 71..77, 85, 86 -> "❄"; in 95..99 -> "⛈"; else -> "☁"
@@ -310,9 +311,9 @@ object PublicApis {
         }.getOrNull()
 
     fun weather(loc: Location): Weather? = runCatching {
-        val j = getJson("https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&current=temperature_2m,weather_code&timezone=auto") as? JSONObject ?: return@runCatching null
+        val j = getJson("https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&current=temperature_2m,weather_code,is_day&timezone=auto") as? JSONObject ?: return@runCatching null
         val cur = j.getJSONObject("current")
-        Weather(loc.city, cur.getDouble("temperature_2m"), cur.getInt("weather_code"))
+        Weather(loc.city, cur.getDouble("temperature_2m"), cur.getInt("weather_code"), cur.optInt("is_day", 1) == 1)
     }.getOrNull()
 
     /**

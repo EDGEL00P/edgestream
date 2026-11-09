@@ -28,9 +28,6 @@ fun WeatherGlyph(code: Int, modifier: Modifier = Modifier, glyphSize: Dp = 18.dp
     )
 }
 
-/** Night for current conditions without an is_day flag: before 6:00 or from 19:00, local time. */
-fun isNightNow(hour: Int = java.time.LocalTime.now().hour): Boolean = hour < 6 || hour >= 19
-
 /** The Meteocons fill icon for an Open-Meteo (WMO) weather code. */
 internal fun weatherAnimation(code: Int, night: Boolean): String = when (code) {
     0 -> if (night) "clear-night" else "clear-day"

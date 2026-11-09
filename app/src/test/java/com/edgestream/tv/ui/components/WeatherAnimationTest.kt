@@ -1,7 +1,6 @@
 package com.edgestream.tv.ui.components
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -19,9 +18,5 @@ class WeatherAnimationTest {
         assertEquals("clear-night", weatherAnimation(0, night = true))
         assertEquals("clear-day", weatherAnimation(0, night = false))
         assertEquals("hail", weatherAnimation(99, night = false))
-    }
-
-    @Test fun nightIsBeforeSixOrFromSeven() {
-        assertTrue(isNightNow(5)); assertFalse(isNightNow(6)); assertFalse(isNightNow(18)); assertTrue(isNightNow(19))
     }
 }

@@ -218,7 +218,7 @@ private fun DreamScreen() {
                     Text(java.text.SimpleDateFormat("EEEE d MMMM", java.util.Locale.getDefault()).format(now).uppercase(), style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 3.sp), color = Color.White.copy(alpha = 0.85f))
                     weather?.let { w ->
                         Spacer(Modifier.width(18.dp))
-                        WeatherGlyph(w.code, glyphSize = 20.dp, night = com.edgestream.tv.ui.components.isNightNow())
+                        WeatherGlyph(w.code, glyphSize = 20.dp, night = !w.isDay)
                         Spacer(Modifier.width(8.dp))
                         Text("${w.tempC.toInt()}°  ${w.city}", style = MaterialTheme.typography.labelLarge, color = Color.White.copy(alpha = 0.85f), maxLines = 1)
                     }

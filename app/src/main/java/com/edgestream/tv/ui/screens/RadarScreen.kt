@@ -485,7 +485,7 @@ private fun InfoRail(
             Column(Modifier.padding(top = 8.dp)) {
                 if (simple != null) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        WeatherGlyph(simple.code, glyphSize = 34.dp, night = com.edgestream.tv.ui.components.isNightNow())
+                        WeatherGlyph(simple.code, glyphSize = 34.dp, night = !simple.isDay)
                         Text(
                             temp(simple.tempC, fahrenheit),
                             style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
