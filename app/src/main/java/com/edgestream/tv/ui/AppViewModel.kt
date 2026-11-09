@@ -55,13 +55,13 @@ sealed interface NowPlaying {
 }
 
 enum class Screen(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    HOME("Home", Icons.Rounded.Home), LIVE("TV Guide", Icons.Rounded.LiveTv), GUIDE("Guide", Icons.Rounded.CalendarViewWeek),
+    HOME("Home", Icons.Rounded.Home), LIVE("Live TV", Icons.Rounded.LiveTv), GUIDE("Guide", Icons.Rounded.CalendarViewWeek),
     MOVIES("Movies", Icons.Rounded.Movie), SERIES("TV Shows", Icons.Rounded.VideoLibrary), SPORTS("Sports", Icons.Rounded.SportsSoccer),
     TIMELINE("Schedule", Icons.Rounded.Timeline),
     BETTING("Odds", Icons.Rounded.QueryStats), RADAR("Radar", Icons.Rounded.Radar),
     DEBRID("Cloud Library", Icons.Rounded.CloudQueue), APPS("Apps", Icons.Rounded.GridView), SYSTEM("Device", Icons.Rounded.Speed),
     SEARCH("Search", Icons.Rounded.Search), SETTINGS("Settings", Icons.Rounded.Settings),
-    CALENDAR("Planner", Icons.Rounded.CalendarMonth),
+    CALENDAR("Calendar", Icons.Rounded.CalendarMonth),
 }
 
 /** Everything derived from the provider's channel list: display names, badges and raw names. */
