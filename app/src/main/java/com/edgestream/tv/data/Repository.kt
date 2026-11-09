@@ -224,6 +224,7 @@ class Repository(
                 refreshEpgLocked(source)
                 status(null)
             } catch (t: Throwable) {
+                if (t is kotlinx.coroutines.CancellationException) throw t
                 db.sources().upsert(source.copy(lastError = "Guide: ${t.message}"))
                 status("Guide for ${source.name}: ${t.message ?: "failed"}", done = true)
             }
