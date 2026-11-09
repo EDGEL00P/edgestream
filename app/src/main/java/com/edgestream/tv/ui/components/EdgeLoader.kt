@@ -80,87 +80,102 @@ fun EdgeLoader(
             while (y < size.height) { drawRect(Color.Black.copy(alpha = 0.18f), Offset(0f, y), androidx.compose.ui.geometry.Size(size.width, 2f)); y += 5f }
             drawRect(Brush.radialGradient(listOf(Color.Black.copy(alpha = 0.25f), Color.Black.copy(alpha = 0.85f)), center = center, radius = size.maxDimension * 0.6f))
         }
+        val glitch = rememberGlitch()
         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-            GlitchWordmark()
+            GlitchWordmark(glitch, progress)
             title?.takeIf { it.isNotBlank() }?.let {
                 Text(it, color = Color.White, fontSize = if (poster.isNullOrBlank()) 26.sp else 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = if (poster.isNullOrBlank()) 18.dp else 12.dp).widthIn(max = 760.dp))
             }
-            LoadBar(step, progress, Modifier.padding(top = 22.dp).width(520.dp))
+            LoadStatus(step, progress, Modifier.padding(top = 18.dp).width(620.dp))
         }
     }
 }
 
+/** The loader's one glitch clock: bursts that get more violent the longer the wait. */
+private class Glitch {
+    var tick by mutableLongStateOf(0L)
+    var jitter by mutableFloatStateOf(0f)
+    var start = 0L
+}
+
 @Composable
-private fun GlitchWordmark() {
-    // A burst of glitch every second or two, steady in between, like a signal locking on.
-    var tick by remember { mutableLongStateOf(0L) }
-    var jitter by remember { mutableFloatStateOf(0f) }
+private fun rememberGlitch(): Glitch {
+    val g = remember { Glitch() }
     LaunchedEffect(Unit) {
         var next = 0L
         while (true) withFrameMillis { t ->
-            tick = t
-            jitter = if (t < next) Random.nextFloat() else 0f
-            if (t > next + 220) next = t + 900 + Random.nextLong(1_400)
+            if (g.start == 0L) g.start = t
+            g.tick = t
+            // A signal struggling to lock: up to twice as hard after eight seconds of waiting,
+            // and the bursts come closer together.
+            val strain = 1f + ((t - g.start) / 8_000f).coerceIn(0f, 1f)
+            g.jitter = if (t < next) (0.45f + Random.nextFloat() * 0.55f) * strain else 0f
+            if (t > next + 280) next = t + (1_100 / strain).toLong() + Random.nextLong((1_200 / strain).toLong())
         }
     }
-    val accent = Edge.Accent
+    return g
+}
+
+/**
+ * EDGESTREAM is the progress bar: dim letters fill with white from the left as it loads (a
+ * running fill when the step can't be measured), and glitch bursts tear through them.
+ */
+@Composable
+private fun GlitchWordmark(g: Glitch, progress: Float?) {
+    val tick = g.tick
+    val jitter = g.jitter
+    // Unmeasurable steps run a fill across and start again.
+    val fill = progress?.coerceIn(0f, 1f) ?: (((tick - g.start) % 1_600L) / 1_600f).let { 1f - (1f - it) * (1f - it) }
+    val word = "EDGESTREAM"
     Box(contentAlignment = Alignment.Center) {
-        val split = 10f * jitter
-        // Colour channels slipping apart: theme accent one way, white the other.
-        Text("EDGESTREAM", color = accent.copy(alpha = 0.75f), fontFamily = Wordmark, fontSize = 120.sp, letterSpacing = 14.sp,
-            modifier = Modifier.drawWithContent { translate(left = -split, top = split * 0.3f) { this@drawWithContent.drawContent() } })
-        Text("EDGESTREAM", color = Edge.Accent2.copy(alpha = 0.6f * jitter), fontFamily = Wordmark, fontSize = 120.sp, letterSpacing = 14.sp,
-            modifier = Modifier.drawWithContent { translate(left = split) { this@drawWithContent.drawContent() } })
-        Text("EDGESTREAM", color = Color.White, fontFamily = Wordmark, fontSize = 120.sp, letterSpacing = 14.sp,
+        val split = 22f * jitter
+        // Colour channels slipping apart behind the letters: accent one way, the second accent the other.
+        Text(word, color = Edge.Accent.copy(alpha = (0.85f * jitter).coerceAtMost(0.85f)), fontFamily = Wordmark, fontSize = 120.sp, letterSpacing = 14.sp,
+            modifier = Modifier.drawWithContent { translate(left = -split, top = split * 0.25f) { this@drawWithContent.drawContent() } })
+        Text(word, color = Edge.Accent2.copy(alpha = (0.7f * jitter).coerceAtMost(0.7f)), fontFamily = Wordmark, fontSize = 120.sp, letterSpacing = 14.sp,
+            modifier = Modifier.drawWithContent { translate(left = split, top = -split * 0.2f) { this@drawWithContent.drawContent() } })
+        // The unfilled letters.
+        Text(word, color = Color.White.copy(alpha = 0.16f), fontFamily = Wordmark, fontSize = 120.sp, letterSpacing = 14.sp)
+        // The filled part, torn into slices during a burst.
+        Text(word, color = Color.White, fontFamily = Wordmark, fontSize = 120.sp, letterSpacing = 14.sp,
             modifier = Modifier.drawWithContent {
-                if (jitter == 0f) { this@drawWithContent.drawContent(); return@drawWithContent }
-                // Torn bands: the wordmark in slices, a few pushed sideways.
-                val bands = 7
+                val right = size.width * fill
+                if (jitter == 0f) { clipRect(right = right) { this@drawWithContent.drawContent() }; return@drawWithContent }
+                val bands = 11
                 val h = size.height / bands
-                val seed = Random(tick / 60)
+                val seed = Random(tick / 50)
                 repeat(bands) { i ->
-                    val dx = if (seed.nextFloat() < 0.35f) (seed.nextFloat() - 0.5f) * 60f * jitter else 0f
-                    clipRect(top = i * h, bottom = (i + 1) * h) { translate(left = dx) { this@drawWithContent.drawContent() } }
+                    val dx = if (seed.nextFloat() < 0.5f) (seed.nextFloat() - 0.5f) * 140f * jitter else 0f
+                    clipRect(top = i * h, bottom = (i + 1) * h, right = right + dx) {
+                        translate(left = dx) { this@drawWithContent.drawContent() }
+                    }
                 }
             })
+        // The leading edge of the fill: a thin accent line that jumps with the tear.
+        Box(
+            Modifier.matchParentSize().drawWithContent {
+                val x = size.width * fill + (if (jitter > 0f) (Random(tick / 50).nextFloat() - 0.5f) * 40f * jitter else 0f)
+                if (fill in 0.01f..0.99f) drawRect(Edge.Accent, topLeft = androidx.compose.ui.geometry.Offset(x - 2f, size.height * 0.2f),
+                    size = androidx.compose.ui.geometry.Size(4f, size.height * 0.6f))
+            },
+        )
     }
 }
 
+/** The step and how far along it is, under the wordmark, with the measured connection speed. */
 @Composable
-private fun LoadBar(step: String, progress: Float?, modifier: Modifier) {
+private fun LoadStatus(step: String, progress: Float?, modifier: Modifier) {
     val context = LocalContext.current
-    // The connection's measured speed (Media3's bandwidth meter, shared by every stream).
     var mbps by remember { mutableFloatStateOf(0f) }
-    var sweep by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(Unit) {
         val meter = androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.getSingletonInstance(context)
-        var start = 0L
-        while (true) withFrameMillis { t ->
-            if (start == 0L) start = t
-            sweep = ((t - start) % 1_400L) / 1_400f
-            mbps = meter.bitrateEstimate / 1_000_000f
-        }
+        while (true) { mbps = meter.bitrateEstimate / 1_000_000f; kotlinx.coroutines.delay(500) }
     }
-    Column(modifier) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-            Text(step.uppercase(), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, maxLines = 1)
-            Spacer(Modifier.weight(1f))
-            if (progress != null) Text("${(progress * 100).toInt()}%", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-        }
-        Box(Modifier.padding(top = 10.dp).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.18f))) {
-            if (progress != null) {
-                Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).fillMaxHeight().background(Edge.Accent))
-            } else {
-                // Unmeasurable step: a light running along the track.
-                Box(Modifier.fillMaxSize().drawWithContent {
-                    val w = size.width * 0.3f
-                    val x = -w + (size.width + w) * sweep
-                    drawRect(Brush.horizontalGradient(listOf(Color.Transparent, Edge.Accent, Color.Transparent), startX = x, endX = x + w))
-                })
-            }
-        }
-        if (mbps > 0f) Text("Connection %.1f Mbps".format(mbps), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp,
-            modifier = Modifier.padding(top = 8.dp))
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Text(step.uppercase(), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp, maxLines = 1)
+        Spacer(Modifier.weight(1f))
+        if (mbps > 0f) Text("%.1f Mbps".format(mbps), color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp, modifier = Modifier.padding(end = 16.dp))
+        if (progress != null) Text("${(progress * 100).toInt()}%", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
     }
 }
