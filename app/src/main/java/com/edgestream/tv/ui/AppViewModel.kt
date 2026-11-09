@@ -51,6 +51,8 @@ sealed interface NowPlaying {
         /** External ids for optional TheIntroDB skip data. */
         val imdbId: String? = null, val tmdbId: Int? = null,
         val season: Int? = null, val episode: Int? = null,
+        /** The chosen release's name/details, so the player can show its quality badges. */
+        val badgeText: String = "",
     ) : NowPlaying
 }
 
@@ -1165,6 +1167,7 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
         key: String, title: String, poster: String?, url: String, subtitle: String? = null, fromStart: Boolean = false,
         saveUrl: String = url, fallbacks: List<String> = emptyList(),
         imdbId: String? = null, tmdbId: Int? = null, season: Int? = null, episode: Int? = null,
+        badgeText: String = "",
     ) {
         vodFallbacks = ArrayDeque(fallbacks)
         rememberLastEpisode(key, title, poster)
@@ -1187,6 +1190,7 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
                 imdbId = resolvedImdb, tmdbId = resolvedTmdb,
                 season = season ?: label?.groupValues?.get(1)?.toIntOrNull(),
                 episode = episode ?: label?.groupValues?.get(2)?.toIntOrNull(),
+                badgeText = badgeText,
             )
             player.play(
                 url, title, isLive = false, startPositionMs = resumeAt,
@@ -1672,6 +1676,7 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
             t.key, t.title, t.poster, first, t.subtitle, fromStart,
             saveUrl = server ?: first, fallbacks = listOfNotNull(server.takeIf { stream != null }),
             imdbId = t.imdbId, tmdbId = t.tmdbId, season = t.season, episode = t.episode,
+            badgeText = stream?.let { "${it.name} ${it.details}" }.orEmpty(),
         )
     }
 

@@ -121,6 +121,23 @@ fun PlayerScreen(vm: AppViewModel) {
     val clock by vm.clock.collectAsStateWithLifecycle()
     val favs by vm.favoriteKeys.collectAsStateWithLifecycle()
 
+    // One badge set for the whole player: match the release name when there is one, plus the
+    // real video/audio tracks, so the strip reflects whatever is actually playing.
+    val badgeSet by produceState(com.edgestream.tv.data.StreamBadges.NONE) {
+        value = com.edgestream.tv.data.StreamBadges.load(com.edgestream.tv.EdgeStreamApp.instance.cacheDir)
+    }
+    val badges = remember(badgeSet, np, st.videoInfo, st.videoHeight, st.audio) {
+        val head = when (val p = np) {
+            is NowPlaying.Live -> p.channel.name + " " + (p.catchup?.title ?: "")
+            is NowPlaying.Vod -> p.title + " " + (p.subtitle ?: "") + " " + p.badgeText
+            null -> ""
+        }
+        val tracks = com.edgestream.tv.data.StreamBadges.describe(
+            st.videoInfo, st.videoHeight, st.audio.map { it.label },
+        )
+        badgeSet.match("$head $tracks", limit = 6)
+    }
+
     val live = np as? NowPlaying.Live
     val isLiveTv = live != null && live.catchup == null
 
@@ -347,6 +364,7 @@ fun PlayerScreen(vm: AppViewModel) {
         // Info-only toast (no buttons) after zapping or seeking with the bar closed.
         InfoToast(
             vm, np, st.videoInfo, settings.use24h, clock, st.isPlaying, favs,
+            badges = badges,
             sportsGame = sportsGame, show = layer == Layer.NONE, toastUntil = toastUntil,
             tick = tick, modifier = Modifier.align(Alignment.BottomCenter),
         )
@@ -358,7 +376,7 @@ fun PlayerScreen(vm: AppViewModel) {
             BarLayer(
                 vm = vm, np = np, videoInfo = st.videoInfo, use24h = settings.use24h, clock = clock,
                 playing = st.isPlaying, favs = favs, isLiveTv = isLiveTv, live = live,
-                sportsGame = sportsGame, tick = tick,
+                badges = badges, sportsGame = sportsGame, tick = tick,
                 onLayer = { layer = it; touch() },
             )
         }
@@ -471,10 +489,11 @@ private fun InfoToast(
     vm: AppViewModel, np: NowPlaying?, videoInfo: String, use24h: Boolean, clock: Long,
     playing: Boolean, favs: Set<String>, sportsGame: Sports.Game?, show: Boolean,
     toastUntil: Long, tick: androidx.compose.runtime.State<Long>, modifier: Modifier = Modifier,
+    badges: List<com.edgestream.tv.data.StreamBadges.Badge> = emptyList(),
 ) {
     val active = tick.value >= 0 && show && System.currentTimeMillis() < toastUntil
     AnimatedVisibility(active, modifier, enter = fadeIn(), exit = fadeOut()) {
-        Scrim { NowInfo(vm, np, videoInfo, use24h, clock, tick.value, playing, favs, sportsGame = sportsGame) }
+        Scrim { NowInfo(vm, np, videoInfo, use24h, clock, tick.value, playing, favs, badges = badges, sportsGame = sportsGame) }
     }
 }
 
@@ -624,11 +643,12 @@ private fun BarLayer(
     playing: Boolean, favs: Set<String>, isLiveTv: Boolean, live: NowPlaying.Live?,
     sportsGame: Sports.Game?, tick: androidx.compose.runtime.State<Long>,
     onLayer: (Layer) -> Unit,
+    badges: List<com.edgestream.tv.data.StreamBadges.Badge> = emptyList(),
 ) {
     val now = tick.value
     Scrim {
         // The control bar brings its own focusable seek bar; don't draw a second one above it.
-        NowInfo(vm, np, videoInfo, use24h, clock, now, playing, favs, timeBar = false, sportsGame = sportsGame)
+        NowInfo(vm, np, videoInfo, use24h, clock, now, playing, favs, badges = badges, timeBar = false, sportsGame = sportsGame)
         ControlBar(
             vm = vm, isLiveTv = isLiveTv, live = live, favs = favs, playing = playing,
             tick = now,
@@ -644,10 +664,20 @@ private fun NowInfo(
     vm: AppViewModel, np: NowPlaying?, videoInfo: String, use24h: Boolean, clock: Long,
     tick: Long, playing: Boolean, favs: Set<String>, timeBar: Boolean = true,
     sportsGame: Sports.Game? = null,
+    badges: List<com.edgestream.tv.data.StreamBadges.Badge> = emptyList(),
 ) {
     // Recomposed by the ticker; the position itself is read live so seeks show instantly.
     val position = if (tick >= 0) vm.player.exo.currentPosition else 0L
     val duration = vm.player.exo.duration.coerceAtLeast(0)
+    if (badges.isNotEmpty()) Row(
+        Modifier.padding(bottom = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        badges.forEach { b ->
+            AsyncImage(b.image, b.name, Modifier.height(28.dp), contentScale = ContentScale.FillHeight)
+        }
+    }
     when (np) {
         is NowPlaying.Live -> {
             val ch = np.channel
