@@ -166,7 +166,7 @@ private fun TimeTile(clock: Long, use24h: Boolean, w: PublicApis.WeatherDetail?,
             // Now — the only place the current temperature appears (the forecast lives in Weather).
             if (w != null) {
                 Text("   ${temp(w.tempC, f)}  ${w.city}", color = Edge.Text.copy(alpha = 0.75f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                WeatherGlyph(w.code, glyphSize = 14.dp, modifier = Modifier.padding(start = 6.dp))
+                WeatherGlyph(w.code, glyphSize = 14.dp, modifier = Modifier.padding(start = 6.dp), night = com.edgestream.tv.ui.components.isNightNow())
             }
         }
     }
@@ -371,7 +371,7 @@ private fun ForecastSpot(w: PublicApis.WeatherDetail, fahrenheit: Boolean, modif
     Row(modifier.padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                WeatherGlyph(w.code, glyphSize = 40.dp)
+                WeatherGlyph(w.code, glyphSize = 40.dp, night = com.edgestream.tv.ui.components.isNightNow())
                 Text(w.city.uppercase(), color = Edge.Text, fontSize = 48.sp, lineHeight = 52.sp, fontWeight = FontWeight.Black, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 14.dp))
             }

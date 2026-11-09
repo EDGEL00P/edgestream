@@ -145,6 +145,8 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.11.2")
     implementation("com.squareup.okhttp3:okhttp:5.3.2")
     implementation("io.coil-kt.coil3:coil-compose:3.3.0")
+    // Animated weather icons (Meteocons fill, MIT; res/raw/meteo_*.json).
+    implementation("com.airbnb.android:lottie-compose:6.7.1")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.3.0")
 
     implementation("com.google.zxing:core:3.5.3")
