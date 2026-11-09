@@ -1078,12 +1078,18 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** Launchable apps for the Apps band, read once in the background. */
+    private val installedApps = flow { emit(com.edgestream.tv.ui.screens.loadApps(app)) }
+        .flowOn(kotlinx.coroutines.Dispatchers.IO)
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
     /** Everything the band can show, from flows the app already keeps (no new network calls). */
     val bandInputs: StateFlow<com.edgestream.tv.ui.shell.BandInputs> = combine(
         combine(sportsGames, favouriteChannels, recentChannels, nowNext) { g, f, r, nn -> listOf(g, f, r, nn) },
         combine(continueWatching, latestMovies, latestSeries, weatherAlert, weatherDetail) { c, m, s, a, w -> listOf(c, m, s, a, w) },
-        watchList,
-    ) { x, y, saved ->
+        combine(watchList, calendarEvents, installedApps) { w, e, a -> Triple(w, e, a) },
+    ) { x, y, z ->
+        val (saved, events, apps) = z
         @Suppress("UNCHECKED_CAST")
         val nn = x[3] as Map<String, NowNext>
         @Suppress("UNCHECKED_CAST")
@@ -1099,6 +1105,8 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
             weather = y[4] as com.edgestream.tv.data.PublicApis.WeatherDetail?,
             forecast = (y[4] as com.edgestream.tv.data.PublicApis.WeatherDetail?)?.daily.orEmpty(),
             watchList = saved,
+            events = com.edgestream.tv.data.upcoming(events, java.time.LocalDate.now(), days = 30, limit = 12),
+            apps = apps,
         )
     }.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5_000),

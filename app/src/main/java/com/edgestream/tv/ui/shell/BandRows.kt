@@ -19,6 +19,10 @@ sealed interface BandItem {
     data class Alert(val warning: Trackers.Warning) : BandItem { override val id get() = "alert:${warning.title}" }
     data class Day(val day: PublicApis.DayPoint) : BandItem { override val id get() = "day:${day.date}" }
     data class Watch(val item: com.edgestream.tv.data.WatchItem) : BandItem { override val id get() = "watch:${item.id}" }
+    data class Event(val date: java.time.LocalDate, val event: com.edgestream.tv.data.CalendarEvent) : BandItem {
+        override val id get() = "event:${event.id}:$date"
+    }
+    data class App(val app: com.edgestream.tv.ui.screens.AppTile) : BandItem { override val id get() = "app:${app.pkg}" }
 }
 
 data class BandRow(val title: String, val items: List<BandItem>)
@@ -49,6 +53,10 @@ data class BandInputs(
     val forecast: List<PublicApis.DayPoint> = emptyList(),
     /** The active profile's saved titles (On Demand band, first row). */
     val watchList: List<com.edgestream.tv.data.WatchItem> = emptyList(),
+    /** The next calendar events (Calendar band). */
+    val events: List<Pair<java.time.LocalDate, com.edgestream.tv.data.CalendarEvent>> = emptyList(),
+    /** Launchable apps (Apps band). */
+    val apps: List<com.edgestream.tv.ui.screens.AppTile> = emptyList(),
 )
 
 private const val GAMES_PER_ROW = 10
@@ -78,5 +86,17 @@ fun bandRows(tile: Tile, i: BandInputs): List<BandRow> = when (tile) {
         BandRow("Warnings", listOfNotNull(i.alert?.let(BandItem::Alert))),
         BandRow("Forecast", i.forecast.take(5).map(BandItem::Day)),
     )
-    Tile.SEARCH, Tile.SETTINGS, Tile.PHONE, Tile.APPS, Tile.CALENDAR, Tile.ODDS -> emptyList()
+    // Games with a bookmaker line: live first, then the soonest.
+    Tile.ODDS -> listOf(
+        BandRow(
+            "Lines",
+            i.games.filter { it.line != null && it.state != Sports.State.FINAL }
+                .sortedWith(compareBy({ if (it.state == Sports.State.LIVE) 0 else 1 }, { it.startMs }))
+                .take(GAMES_PER_ROW).map(BandItem::Game),
+        ),
+    )
+    Tile.CALENDAR -> listOf(BandRow("Coming Up", i.events.take(CARDS_PER_ROW).map { (d, e) -> BandItem.Event(d, e) }))
+    Tile.APPS -> listOf(BandRow("Your Apps", i.apps.take(CARDS_PER_ROW).map(BandItem::App)))
+    // Search, Settings and Remote open a screen or dialog; a row would add nothing.
+    Tile.SEARCH, Tile.SETTINGS, Tile.PHONE -> emptyList()
 }.filter { it.items.isNotEmpty() }

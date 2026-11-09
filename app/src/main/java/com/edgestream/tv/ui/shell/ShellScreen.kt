@@ -325,6 +325,7 @@ private fun Band(
     onEvent: (ShellEvent) -> Unit,
 ) {
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
     val tile = state.tile
     if (rows.isEmpty()) {
         // A utility tile (Apps, Search…) is already named in the Spotlight above: say nothing twice.
@@ -408,6 +409,8 @@ private fun Band(
                         is BandItem.Vod -> VodCard(item, req) { vm.openTitle(item.item) }
                         is BandItem.Alert -> AlertCard(item, req) { onEvent(ShellEvent.Open(Tile.WEATHER)) }
                         is BandItem.Day -> DayCard(item, settings.fahrenheit, req) { onEvent(ShellEvent.Open(Tile.WEATHER)) }
+                        is BandItem.Event -> EventCard(item, settings.use24h, req) { onEvent(ShellEvent.Open(Tile.CALENDAR)) }
+                        is BandItem.App -> AppCard(item, req) { runCatching { context.startActivity(item.app.intent) } }
                     }
                 }
             }

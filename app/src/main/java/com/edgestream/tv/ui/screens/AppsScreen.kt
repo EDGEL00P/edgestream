@@ -46,7 +46,7 @@ import com.edgestream.tv.ui.components.FocusSurface
 import kotlinx.coroutines.delay
 
 /** One installed app, ready to launch from the grid. */
-private data class AppTile(val label: String, val pkg: String, val intent: Intent, val icon: ImageBitmap?)
+data class AppTile(val label: String, val pkg: String, val intent: Intent, val icon: ImageBitmap?)
 
 /**
  * The Apps tab: the viewer's own hand-picked shortcuts plus a tile into the TV's system
@@ -177,7 +177,7 @@ private val PREFERRED_APPS = listOf(
 )
 
 /** The curated shortcuts; every launchable app as a fallback so the tab is never empty. */
-private fun loadApps(context: Context): List<AppTile> {
+internal fun loadApps(context: Context): List<AppTile> {
     val pm = context.packageManager
     fun query(category: String): List<AppTile> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(category)

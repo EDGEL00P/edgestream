@@ -34,6 +34,24 @@ class BandRowsTest {
         assertEquals(listOf("game:u1", "game:u2"), rows[1].items.map { it.id })
     }
 
+    @Test fun oddsShowsGamesWithALineLiveFirst() {
+        val line = Sports.Line("ESPN BET", "LAC -6.5", 228.5, -250, 200)
+        val rows = bandRows(Tile.ODDS, empty.copy(games = listOf(
+            game("u1", Sports.State.UPCOMING, 200).copy(line = line), game("x", Sports.State.UPCOMING, 100),
+            game("l1", Sports.State.LIVE, 0).copy(line = line), game("f1", Sports.State.FINAL, 0).copy(line = line),
+        )))
+        assertEquals(listOf("Lines"), rows.map { it.title })
+        assertEquals(listOf("game:l1", "game:u1"), rows[0].items.map { it.id })
+    }
+
+    @Test fun calendarShowsComingUp() {
+        val day = java.time.LocalDate.of(2026, 11, 10)
+        val e = com.edgestream.tv.data.CalendarEvent("e1", "Dentist", day, java.time.LocalTime.of(9, 30))
+        val rows = bandRows(Tile.CALENDAR, empty.copy(events = listOf(day to e)))
+        assertEquals(listOf("Coming Up"), rows.map { it.title })
+        assertEquals(listOf("event:e1:2026-11-10"), rows[0].items.map { it.id })
+    }
+
     @Test fun emptyRowsOmitted() {
         Tile.entries.forEach { assertEquals("$it", emptyList<BandRow>(), bandRows(it, empty)) }
     }

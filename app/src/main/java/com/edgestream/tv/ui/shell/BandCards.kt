@@ -250,3 +250,35 @@ fun DayCard(item: BandItem.Day, fahrenheit: Boolean, requester: FocusRequester, 
         }
     }
 }
+
+/** A calendar event: its day large, the time and title beside it. */
+@Composable
+fun EventCard(item: BandItem.Event, use24h: Boolean, requester: FocusRequester, onClick: () -> Unit) {
+    val e = item.event
+    BandCard(260.dp, requester, onClick) {
+        Row(Modifier.fillMaxSize().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.width(58.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(item.date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault()).uppercase(), color = Edge.Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(item.date.dayOfMonth.toString(), color = Edge.Text, fontSize = 30.sp, fontWeight = FontWeight.Black)
+            }
+            Column(Modifier.padding(start = 10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                e.time?.let {
+                    val pattern = if (use24h) "HH:mm" else "h:mm a"
+                    Text(it.format(java.time.format.DateTimeFormatter.ofPattern(pattern, Locale.getDefault())), color = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA), fontSize = 13.sp)
+                }
+                Text(e.title, color = Edge.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+/** An installed app: its real icon and name; OK launches it. */
+@Composable
+fun AppCard(item: BandItem.App, requester: FocusRequester, onClick: () -> Unit) {
+    BandCard(150.dp, requester, onClick) {
+        Column(Modifier.fillMaxSize().padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            item.app.icon?.let { androidx.compose.foundation.Image(it, item.app.label, Modifier.size(56.dp).clip(RoundedCornerShape(12.dp))) }
+            Text(item.app.label, color = Edge.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
+        }
+    }
+}

@@ -222,7 +222,7 @@ private fun spotFor(item: BandItem?, tile: Tile, use24h: Boolean): SpotText = wh
         SpotText("Continue watching", p.title, "$left min left", null, emptyList())
     }
     is BandItem.Watch -> item.item.let { w ->
-        SpotText("My List", w.title, if (w.vodKey != null) "On your provider" else "Plays through your add-ons", w.year, emptyList())
+        SpotText("My List", w.title, "Plays through your add-ons", w.year, emptyList())
     }
     is BandItem.Vod -> item.item.let { v ->
         SpotText(if (v.kind == com.edgestream.tv.data.db.VodKind.SERIES) "New show" else "New movie", v.name, v.plot, listOfNotNull(v.year, v.rating?.let { "★ $it" }).joinToString("  ·  ").ifBlank { null }, emptyList())
@@ -232,6 +232,11 @@ private fun spotFor(item: BandItem?, tile: Tile, use24h: Boolean): SpotText = wh
         val name = runCatching { SimpleDateFormat("EEEE d MMMM", Locale.getDefault()).format(SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(d.date)!!) }.getOrDefault(d.date)
         SpotText("Forecast", name, PublicApis.Weather("", 0.0, d.code).description, "High ${d.highC.toInt()}° · Low ${d.lowC.toInt()}°", emptyList())
     }
+    is BandItem.Event -> item.event.let { e ->
+        val day = SimpleDateFormat("EEEE d MMMM", Locale.getDefault()).format(java.sql.Date.valueOf(item.date.toString()))
+        SpotText("Calendar", e.title, listOfNotNull(day, e.time?.let { Format.time(java.time.LocalDateTime.of(item.date, it).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli(), use24h) }).joinToString("  ·  "), null, emptyList())
+    }
+    is BandItem.App -> SpotText("App", item.app.label, "Press OK to open", null, emptyList())
     null -> SpotText("EdgeStream", tile.label, "Press OK to open", null, emptyList())
 }
 
