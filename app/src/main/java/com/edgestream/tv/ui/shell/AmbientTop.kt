@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -274,56 +275,128 @@ private fun GameSpot(g: Sports.Game, use24h: Boolean, fahrenheit: Boolean, previ
             0f to away.copy(alpha = 0.42f), 0.4f to Color.Transparent, 0.6f to Color.Transparent, 1f to home.copy(alpha = 0.42f),
         )))
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (g.state == Sports.State.LIVE) { com.edgestream.tv.ui.components.LiveBadge(); Spacer(Modifier.width(14.dp)) }
-                Text(
-                    "${g.away.name.uppercase()} VS ${g.home.name.uppercase()}",
-                    color = Edge.Text, fontSize = 50.sp * big, lineHeight = 54.sp * big, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-            }
-            // Where it's played and what the weather is doing there; the channel while it previews.
+            // The score bar carries the teams; above it, LIVE and where it's played and what the
+            // weather is doing there (the channel while it previews).
             val place = listOfNotNull(
                 previewing?.let { "On $it" },
                 g.venue,
                 venueWeather?.let { w -> if (w.indoor) "Indoors" else "${temp(w.tempC, fahrenheit)} ${w.description}" },
             ).joinToString("  ·  ")
-            if (place.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
+            if (place.isNotEmpty() || g.state == Sports.State.LIVE) Row(verticalAlignment = Alignment.CenterVertically) {
+                if (g.state == Sports.State.LIVE) { com.edgestream.tv.ui.components.LiveBadge(); Spacer(Modifier.width(14.dp)) }
                 Text(place, color = Edge.Text.copy(alpha = 0.8f), fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 venueWeather?.takeIf { !it.indoor }?.let { WeatherGlyph(it.code, glyphSize = 18.dp, modifier = Modifier.padding(start = 8.dp)) }
             }
-            Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                TeamLogo(g.away.logo, g.away.name, size = 50.dp * big)
-                if (g.state == Sports.State.UPCOMING) {
-                    Text("${SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(Date(g.startMs))}  ${Format.time(g.startMs, use24h)}",
-                        color = Edge.Text, fontSize = 34.sp * big, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 16.dp))
-                } else {
-                    Text(g.away.score ?: "0", color = Edge.Text, fontSize = 46.sp * big, lineHeight = 48.sp * big, fontWeight = FontWeight.Black,
-                        modifier = Modifier.padding(start = 14.dp))
-                    Column(Modifier.padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("${g.away.abbr} · ${g.home.abbr}", color = Edge.Text.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        Text(if (g.state == Sports.State.FINAL) "FINAL" else g.detail.ifBlank { "LIVE" }, color = Edge.Text.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                    Text(g.home.score ?: "0", color = Edge.Text, fontSize = 46.sp * big, lineHeight = 48.sp * big, fontWeight = FontWeight.Black,
-                        modifier = Modifier.padding(end = 14.dp))
+            ScoreBug(g, use24h, latestPlay, big, Modifier.padding(top = 6.dp))
+            if (homeChance != null) Column(Modifier.padding(top = 8.dp).width(SCORE_BUG_WIDTH * big)) {
+                Row(Modifier.fillMaxWidth()) {
+                    Text("${g.away.abbr} ${100 - homeChance}%", color = Edge.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text("  to win", color = Edge.Text.copy(alpha = 0.6f), fontSize = 14.sp, maxLines = 1)
+                    Spacer(Modifier.weight(1f))
+                    Text("${g.home.abbr} $homeChance%", color = Edge.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
-                TeamLogo(g.home.logo, g.home.name, size = 50.dp * big)
-                if (homeChance != null) Column(Modifier.padding(start = 36.dp).weight(1f)) {
-                    Row(Modifier.fillMaxWidth()) {
-                        Text("${g.away.abbr} ${100 - homeChance}%", color = Edge.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                        Text("  to win", color = Edge.Text.copy(alpha = 0.6f), fontSize = 14.sp, maxLines = 1)
-                        Spacer(Modifier.weight(1f))
-                        Text("${g.home.abbr} $homeChance%", color = Edge.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    }
-                    Row(Modifier.padding(top = 5.dp).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50))) {
-                        Box(Modifier.weight((100 - homeChance).coerceAtLeast(1).toFloat()).fillMaxHeight().background(away))
-                        Box(Modifier.weight(homeChance.coerceAtLeast(1).toFloat()).fillMaxHeight().background(home))
-                    }
+                Row(Modifier.padding(top = 5.dp).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50))) {
+                    Box(Modifier.weight((100 - homeChance).coerceAtLeast(1).toFloat()).fillMaxHeight().background(away))
+                    Box(Modifier.weight(homeChance.coerceAtLeast(1).toFloat()).fillMaxHeight().background(home))
                 }
             }
             if (tall && latestPlay != null) DriveChart(g, latestPlay, Modifier.fillMaxWidth())
         }
     }
+}
+
+private val SCORE_BUG_WIDTH = 760.dp
+
+/**
+ * The broadcast-style score bar: each team on its own colour panel (logo, abbreviation, record,
+ * score), a round clock medallion between them (game clock and period live, a countdown to the
+ * start before it), and the down-and-distance under the side with the ball.
+ */
+@Composable
+private fun ScoreBug(g: Sports.Game, use24h: Boolean, latestPlay: Sports.Play?, big: Float, modifier: Modifier) {
+    val upcoming = g.state == Sports.State.UPCOMING
+    val now by androidx.compose.runtime.produceState(System.currentTimeMillis(), g.id, upcoming) {
+        while (upcoming) { value = System.currentTimeMillis(); kotlinx.coroutines.delay(1_000) }
+    }
+    val medal = 92.dp * big
+    Column(modifier.width(SCORE_BUG_WIDTH * big)) {
+        Box(contentAlignment = Alignment.Center) {
+            Row(Modifier.fillMaxWidth().height(66.dp * big), horizontalArrangement = Arrangement.spacedBy(medal - 16.dp)) {
+                TeamPanel(g.away, if (upcoming) null else g.away.score, big, leading = true, Modifier.weight(1f))
+                TeamPanel(g.home, if (upcoming) null else g.home.score, big, leading = false, Modifier.weight(1f))
+            }
+            Column(
+                Modifier.size(medal).clip(CircleShape).background(Color(0xFF14181F))
+                    .border(3.dp, Edge.Text.copy(alpha = 0.85f), CircleShape),
+                verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                val (top, bottom) = when (g.state) {
+                    Sports.State.UPCOMING -> kickoffCountdown(g.startMs - now) to "KICKOFF"
+                    Sports.State.FINAL -> "FINAL" to ""
+                    Sports.State.LIVE -> clockParts(g.detail)
+                }
+                Text(top, color = Color.White, fontSize = (if (top.length > 6) 17 else 24).sp * big, fontWeight = FontWeight.Black, maxLines = 1)
+                if (bottom.isNotEmpty()) Text(bottom, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp * big, fontWeight = FontWeight.Bold, maxLines = 1)
+            }
+        }
+        val situation = latestPlay?.downDistance?.takeIf { g.state == Sports.State.LIVE }
+            ?: if (upcoming) "${SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(Date(g.startMs))}  ·  ${Format.time(g.startMs, use24h)}" else null
+        situation?.let {
+            val homeBall = latestPlay?.team != null && latestPlay.team == g.home.abbr
+            Text(
+                it.uppercase(), color = Edge.Text.copy(alpha = 0.85f), fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, maxLines = 1,
+                modifier = Modifier.padding(top = 6.dp)
+                    .align(if (homeBall) Alignment.End else if (upcoming) Alignment.CenterHorizontally else Alignment.Start)
+                    .padding(horizontal = 18.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TeamPanel(t: Sports.Team, score: String?, big: Float, leading: Boolean, modifier: Modifier) {
+    val c = teamColor(t)
+    val r = 14.dp
+    val shape = if (leading) RoundedCornerShape(topStart = r, bottomStart = r) else RoundedCornerShape(topEnd = r, bottomEnd = r)
+    Row(
+        modifier.fillMaxHeight().clip(shape)
+            .background(androidx.compose.ui.graphics.Brush.horizontalGradient(
+                if (leading) listOf(c.copy(alpha = 0.95f), c.copy(alpha = 0.75f)) else listOf(c.copy(alpha = 0.75f), c.copy(alpha = 0.95f)),
+            ))
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val logo: @Composable () -> Unit = { TeamLogo(t.logo, t.name, size = 46.dp * big) }
+        val name: @Composable () -> Unit = {
+            Column(horizontalAlignment = if (leading) Alignment.Start else Alignment.End) {
+                Text(t.abbr, color = Color.White, fontSize = 24.sp * big, fontWeight = FontWeight.Black, maxLines = 1)
+                t.record?.let { Text(it, color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp * big, fontWeight = FontWeight.SemiBold, maxLines = 1) }
+            }
+        }
+        val points: @Composable () -> Unit = {
+            Text(score.orEmpty(), color = Color.White, fontSize = 40.sp * big, fontWeight = FontWeight.Black, maxLines = 1)
+        }
+        if (leading) { logo(); Spacer(Modifier.width(12.dp)); name(); Spacer(Modifier.weight(1f)); points() }
+        else { points(); Spacer(Modifier.weight(1f)); name(); Spacer(Modifier.width(12.dp)); logo() }
+    }
+}
+
+/** "11:13 - 4th" -> ("11:13", "4TH"); a detail without a clock ("Halftime") stays whole. */
+internal fun clockParts(detail: String): Pair<String, String> {
+    val parts = detail.split(" - ", limit = 2)
+    return if (parts.size == 2) parts[0].trim() to parts[1].trim().uppercase().replace(" QUARTER", "")
+    else detail.uppercase().ifBlank { "LIVE" } to ""
+}
+
+/** Time to the start: "02:14:05" under a day, "2d 04:10" beyond, "SOON" once it's due. */
+internal fun kickoffCountdown(ms: Long): String {
+    if (ms <= 0) return "SOON"
+    val s = ms / 1000
+    val d = s / 86_400
+    val h = s % 86_400 / 3_600
+    val m = s % 3_600 / 60
+    val sec = s % 60
+    return if (d > 0) "%dd %02d:%02d".format(d, h, m) else "%02d:%02d:%02d".format(h, m, sec)
 }
 
 /** Continue watching: a poster card like the band's, its progress on the poster, title beside it. */

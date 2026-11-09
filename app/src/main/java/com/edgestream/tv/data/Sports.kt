@@ -117,6 +117,8 @@ object Sports {
         val scoring: Boolean,
         /** Offensive team abbreviation, when ESPN publishes one. */
         val team: String?,
+        /** The situation after the play ("2nd & 4 at CHI 35"), American football only. */
+        val downDistance: String? = null,
     )
 
     /** The leading player in one statistical category for a team. */
@@ -764,6 +766,7 @@ object Sports {
             homeScore = if (o.has("homeScore")) o.optInt("homeScore") else null,
             scoring = o.optBoolean("scoringPlay"),
             team = team,
+            downDistance = o.optJSONObject("end")?.optString("downDistanceText")?.ifBlank { null },
         )
     }
 
