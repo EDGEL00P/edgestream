@@ -187,6 +187,7 @@ fun FocusSurface(
             }
             .clip(shape)
             .background(fill)
+            .cardCharacter(focused)
             // Outside the beam's window (dialogs): a thin accent edge and a lit leading bar.
             .then(
                 if (focused && !beamed) Modifier.border(1.5.dp, Edge.Accent.copy(alpha = 0.9f), shape).drawWithContent {

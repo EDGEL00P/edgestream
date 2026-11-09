@@ -12,6 +12,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -36,10 +37,42 @@ fun Modifier.depth(lift: () -> Float, shape: Shape, scale: Float = 1.06f, tilt: 
     rotationX = tilt * l
     cameraDistance = 14f * density
     translationY = -6.dp.toPx() * l
-    shadowElevation = 22.dp.toPx() * l
+    // A card sits slightly above the screen even at rest, so the row reads as objects with
+    // thickness rather than flat bars painted on the background.
+    shadowElevation = (5f + 17f * l).dp.toPx()
     this.shape = shape
     clip = true
 }
+
+/**
+ * The relief every card shares: light falls from above, so the top edge catches a highlight and
+ * the base falls into shade. Drawn behind the content and clipped to the card's own outline, so
+ * rounded corners stay clean. One paint pass; no extra layer, no per-frame work.
+ */
+fun Modifier.cardCharacter(focused: Boolean = false): Modifier = drawBehind {
+    // Callers clip to their shape before this modifier, so a full-bleed wash keeps clean corners.
+    val top = if (focused) 0.26f else 0.18f
+    drawRect(
+        Brush.verticalGradient(
+            0.00f to Color.White.copy(alpha = top),
+            0.04f to Color.White.copy(alpha = 0.05f),
+            0.42f to Color.Transparent,
+            0.78f to Color.Black.copy(alpha = 0.05f),
+            0.96f to Color.Black.copy(alpha = 0.14f),
+            1.00f to Color.Black.copy(alpha = 0.30f),
+        ),
+    )
+    drawRect(
+        Brush.horizontalGradient(
+            0f to Color.Transparent,
+            0.12f to Color.White.copy(alpha = 0.22f),
+            0.88f to Color.White.copy(alpha = 0.22f),
+            1f to Color.Transparent,
+        ),
+        size = androidx.compose.ui.geometry.Size(size.width, 1.dp.toPx()),
+    )
+}
+
 
 /** One diagonal sweep of light across the surface each time it gains focus. */
 @Composable

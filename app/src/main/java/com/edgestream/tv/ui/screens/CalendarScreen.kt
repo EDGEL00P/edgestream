@@ -39,6 +39,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -50,6 +52,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.edgestream.tv.data.CalendarEvent
 import com.edgestream.tv.data.EntryKind
+import com.edgestream.tv.data.OnThisDay
 import com.edgestream.tv.data.Repeat
 import com.edgestream.tv.data.eventsOn
 import com.edgestream.tv.ui.AppViewModel
@@ -57,6 +60,7 @@ import com.edgestream.tv.ui.Edge
 import com.edgestream.tv.ui.EdgeShapes
 import com.edgestream.tv.ui.components.EdgeButton
 import com.edgestream.tv.ui.components.FocusSurface
+import com.edgestream.tv.ui.input.remoteClickable
 import com.edgestream.tv.ui.glass.SECONDARY_TEXT_ALPHA
 import kotlinx.coroutines.delay
 import java.time.LocalDate
@@ -96,6 +100,14 @@ fun CalendarScreen(vm: AppViewModel) {
     var editing by remember { mutableStateOf<CalendarEvent?>(null) }
     val todayCell = remember { FocusRequester() }
     LaunchedEffect(Unit) { delay(120); runCatching { todayCell.requestFocus() } }
+    // Real history for the day under focus: keyless, cached on disk, silent if offline.
+    val cacheDir = androidx.compose.ui.platform.LocalContext.current.cacheDir
+    var history by remember { mutableStateOf<List<OnThisDay.Fact>>(emptyList()) }
+    LaunchedEffect(selected) {
+        history = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { OnThisDay.load(selected, cacheDir) }.getOrDefault(emptyList())
+        }
+    }
 
     Row(Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 24.dp)) {
         Column(Modifier.weight(1.25f)) {
@@ -121,6 +133,7 @@ fun CalendarScreen(vm: AppViewModel) {
         }
         DayAgenda(
             selected, eventsOn(events, selected), settings.use24h,
+            history = history,
             forecast = weather?.daily?.firstOrNull { it.date == selected.toString() },
             games = dayGames,
             pickFor = { g -> nfl?.picks?.firstOrNull { it.game.id == g.id } },
@@ -131,6 +144,7 @@ fun CalendarScreen(vm: AppViewModel) {
                     ?: vm.showNotice("No channel in your lineup is carrying ${g.away.abbr} v ${g.home.abbr}")
             },
             onAdd = { editing = newEvent(selected) },
+            onHistory = { f -> vm.showNotice("${OnThisDay.formatYear(f.year)}  ·  ${f.text}") },
             onOpen = { e ->
                 when (e.kind) {
                     EntryKind.USER -> editing = e
@@ -212,10 +226,12 @@ private fun MonthGrid(
 @Composable
 private fun DayAgenda(
     day: LocalDate, entries: List<CalendarEvent>, use24h: Boolean,
+    history: List<OnThisDay.Fact>,
     forecast: com.edgestream.tv.data.PublicApis.DayPoint?,
     games: List<com.edgestream.tv.data.Sports.Game>,
     pickFor: (com.edgestream.tv.data.Sports.Game) -> com.edgestream.tv.data.NflPicks.Pick?,
     onGame: (com.edgestream.tv.data.Sports.Game) -> Unit,
+    onHistory: (OnThisDay.Fact) -> Unit,
     onAdd: () -> Unit, onOpen: (CalendarEvent) -> Unit, modifier: Modifier,
 ) {
     // The day's whole story: the date, its weather, your plans, then the sport on that day.
@@ -277,11 +293,12 @@ private fun DayAgenda(
                         shape = RoundedCornerShape(12.dp), color = Edge.Text.copy(alpha = 0.04f), focusScale = 1.02f, glow = false,
                     ) {
                         Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.width(76.dp)) {
+                            Box(Modifier.width(96.dp), contentAlignment = Alignment.CenterStart) {
                                 if (g.state == com.edgestream.tv.data.Sports.State.LIVE) com.edgestream.tv.ui.components.LiveBadge(compact = true)
                                 else Text(
                                     if (g.state == com.edgestream.tv.data.Sports.State.FINAL) "Final" else com.edgestream.tv.ui.Format.time(g.startMs, use24h),
                                     style = MaterialTheme.typography.labelLarge, color = Edge.Dim,
+                                    maxLines = 1, softWrap = false,
                                 )
                             }
                             com.edgestream.tv.ui.components.TeamLogo(g.away.logo, g.away.name, size = 24.dp)
@@ -301,7 +318,83 @@ private fun DayAgenda(
                     }
                 }
             }
+            if (history.isNotEmpty()) item {
+                HistoryTimeline(history, day, onHistory)
+            }
         }
+    }
+}
+
+/**
+ * "On this day": a real timeline rather than another stack of bars. One continuous rail runs
+ * down the left, each fact gets a node and its own age, and eras break the run into chapters.
+ * The layout is unique to the calendar — no other screen draws a timeline.
+ */
+@Composable
+private fun HistoryTimeline(facts: List<OnThisDay.Fact>, day: LocalDate, onFact: (OnThisDay.Fact) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().padding(top = 18.dp).drawBehind {
+            val x = 22.dp.toPx()
+            drawLine(
+                Edge.Line, androidx.compose.ui.geometry.Offset(x, 6.dp.toPx()),
+                androidx.compose.ui.geometry.Offset(x, size.height - 6.dp.toPx()), 2.dp.toPx(),
+            )
+        },
+    ) {
+        Text(
+            "ON THIS DAY  ·  ${facts.size} FACTS  ·  OK TO READ",
+            style = MaterialTheme.typography.labelSmall, color = Edge.Accent,
+            fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, maxLines = 1, softWrap = false,
+            modifier = Modifier.padding(start = 44.dp, bottom = 10.dp),
+        )
+        var era: String? = null
+        facts.forEach { f ->
+            val thisEra = OnThisDay.era(f.year)
+            if (thisEra != era) {
+                era = thisEra
+                Text(
+                    thisEra.uppercase(), style = MaterialTheme.typography.labelSmall, color = Dim,
+                    letterSpacing = 1.2.sp, modifier = Modifier.padding(start = 44.dp, top = 8.dp, bottom = 4.dp),
+                )
+            }
+            var focused by remember(f.year, f.text) { mutableStateOf(false) }
+            Row(
+                Modifier.fillMaxWidth().height(54.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (focused) Edge.Text.copy(alpha = 0.12f) else Edge.Text.copy(alpha = 0.02f))
+                    .onFocusChanged { focused = it.isFocused }
+                    .remoteClickable { onFact(f) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.width(44.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(if (focused) Edge.OnAccent else Edge.Accent))
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            OnThisDay.formatYear(f.year), color = Edge.Text, fontSize = 16.sp,
+                            fontWeight = FontWeight.Black, maxLines = 1,
+                        )
+                        val ago = OnThisDay.yearsAgo(f.year, day)
+                        if (ago != null) Text(
+                            "  ·  " + if (ago <= 0) "THIS YEAR" else "$ago YEARS AGO",
+                            color = Edge.Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp, maxLines = 1,
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Text(f.kind.label, color = Edge.Faint, fontSize = 10.sp, maxLines = 1)
+                    }
+                    Text(
+                        f.text, color = Edge.Text.copy(alpha = 0.82f), fontSize = 13.sp,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+        Text(
+            "History from Wikipedia", style = MaterialTheme.typography.labelSmall, color = Edge.Faint,
+            modifier = Modifier.padding(start = 44.dp, top = 8.dp),
+        )
     }
 }
 

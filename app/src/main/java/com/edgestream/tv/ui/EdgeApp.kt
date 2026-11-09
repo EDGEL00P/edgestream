@@ -459,8 +459,9 @@ private fun SyncToast(vm: AppViewModel, modifier: Modifier) {
 }
 
 /**
- * The one notification style (tvOS banner): slides in at the top right with the EdgeStream mark,
- * a short title and one line of detail; work in progress gets a thin running line underneath.
+ * The one notification style: a compact dark strip with a leading tile, title, detail and an
+ * optional running line — the same horizontal card language as the channel info bar, so notices
+ * read as part of the TV UI rather than a floating glass panel.
  */
 @Composable
 private fun Banner(visible: Boolean, title: String, detail: String, working: Boolean = false, modifier: Modifier = Modifier) {
@@ -469,23 +470,36 @@ private fun Banner(visible: Boolean, title: String, detail: String, working: Boo
         enter = androidx.compose.animation.slideInHorizontally { it / 2 } + fadeIn(),
         exit = androidx.compose.animation.slideOutHorizontally { it / 2 } + fadeOut(),
     ) {
-        Column(
-            Modifier.width(420.dp).shadow(24.dp, RoundedCornerShape(18.dp), clip = false)
-                .glass(RoundedCornerShape(18.dp), Edge.Solid.copy(alpha = 0.92f)),
+        Row(
+            Modifier.width(470.dp).shadow(20.dp, RoundedCornerShape(12.dp), clip = false)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Edge.Bg.copy(alpha = 0.96f))
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(Edge.Accent), contentAlignment = Alignment.Center) {
-                    com.edgestream.tv.ui.components.EdgeMark(Modifier.size(24.dp))
-                }
-                Column(Modifier.padding(start = 14.dp)) {
-                    Text(title, style = MaterialTheme.typography.titleSmall, color = Edge.Text, maxLines = 1)
-                    Text(detail, style = MaterialTheme.typography.bodyMedium, color = Edge.Text.copy(alpha = 0.72f),
-                        maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                }
+            // A quiet initials tile stands in for the channel square; notices have no artwork.
+            Box(
+                Modifier.size(46.dp).clip(RoundedCornerShape(8.dp)).background(Edge.PanelHi),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    title.split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }
+                        .ifBlank { "E" },
+                    style = MaterialTheme.typography.titleSmall, color = Edge.Text.copy(alpha = 0.65f),
+                    fontWeight = FontWeight.Bold, maxLines = 1,
+                )
             }
-            if (working) androidx.compose.material3.LinearProgressIndicator(
-                Modifier.fillMaxWidth().height(3.dp), color = Edge.Accent, trackColor = Color.Transparent,
-            )
+            Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = Edge.Text,
+                    fontWeight = FontWeight.Bold, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(detail, style = MaterialTheme.typography.bodyMedium, color = Edge.Text.copy(alpha = 0.72f),
+                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                if (working) androidx.compose.material3.LinearProgressIndicator(
+                    Modifier.fillMaxWidth().padding(top = 6.dp).height(3.dp), color = Edge.Accent, trackColor = Edge.Text.copy(alpha = 0.18f),
+                )
+                else Box(Modifier.fillMaxWidth().padding(top = 6.dp).height(3.dp).background(Edge.Text.copy(alpha = 0.12f)))
+            }
         }
     }
 }

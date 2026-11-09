@@ -47,6 +47,7 @@ import coil3.compose.AsyncImage
 import com.edgestream.tv.data.Sports
 import com.edgestream.tv.ui.Edge
 import com.edgestream.tv.ui.glass
+import com.edgestream.tv.ui.components.cardCharacter
 import com.edgestream.tv.ui.components.depth
 import com.edgestream.tv.ui.components.Sheen
 import com.edgestream.tv.ui.components.WeatherGlyph
@@ -86,6 +87,8 @@ fun BandCard(
             .depth({ lift }, CardShape)
             // Real frosted glass (the blurred background behind each card), never a see-through tint.
             .glass(CardShape, Edge.Text.copy(alpha = 0.06f))
+            // Lit top edge / shaded base: the card reads as a solid object, not a flat bar.
+            .cardCharacter(focused)
             .then(if (focused) Modifier.border(2.dp, Edge.Live, CardShape) else Modifier)
             .hoverFocus(requester)
             .onFocusChanged { focused = it.isFocused }
@@ -100,9 +103,14 @@ fun BandCard(
                 onLongClick = onLongClick,
             ),
     ) {
-        // Accent bottom edge (orange/gradient like screenshot), always present.
-        Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp)
-            .background(Brush.horizontalGradient(listOf(Edge.Accent, Edge.Accent2))))
+        // Accent base: a lit strip with a dark underside, so the edge has thickness and a
+        // highlight rather than reading as a flat bar painted on the card.
+        Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(5.dp)
+            .background(Brush.horizontalGradient(listOf(Edge.Accent, Edge.Accent2)))) {
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.45f)))
+            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(1.dp)
+                .background(Color.Black.copy(alpha = 0.25f)))
+        }
         content(focused)
         Sheen(focused)
     }
