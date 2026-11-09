@@ -10,9 +10,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -94,7 +92,9 @@ fun BandCard(
             .hoverFocus(requester)
             .onFocusChanged { focused = it.isFocused }
             .focusProperties { canFocus = active }
-            .focusable(interactionSource = interaction)
+            // No standalone focusable() above this: Compose dispatches OK from the focused focus
+            // target up its ancestors, so a separate focusable would take focus and leave the
+            // clickable node (a descendant) deaf to every press.
             .combinedClickable(
                 interactionSource = interaction,
                 indication = null,

@@ -235,7 +235,7 @@ fun ShellScreen(
                         is BandItem.Watch -> vm.openWatchItem(card.item)
                         is BandItem.Channel -> vm.playChannel(card.channel, card.row)
                         is BandItem.Event -> onEvent(ShellEvent.Open(Tile.CALENDAR))
-                        is BandItem.App -> runCatching { context.startActivity(card.app.intent) }
+                        is BandItem.App -> runCatching { context.startActivity(card.app.intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
                         is BandItem.Alert, is BandItem.Day, is com.edgestream.tv.data.PublicApis.WeatherDetail -> onEvent(ShellEvent.Open(Tile.WEATHER))
                     }
                 }, modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = GAP).graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen })
@@ -414,7 +414,7 @@ private fun Band(
                         is BandItem.Alert -> AlertCard(item, req) { onEvent(ShellEvent.Open(Tile.WEATHER)) }
                         is BandItem.Day -> DayCard(item, settings.fahrenheit, req) { onEvent(ShellEvent.Open(Tile.WEATHER)) }
                         is BandItem.Event -> EventCard(item, settings.use24h, req) { onEvent(ShellEvent.Open(Tile.CALENDAR)) }
-                        is BandItem.App -> AppCard(item, req) { runCatching { context.startActivity(item.app.intent) } }
+                        is BandItem.App -> AppCard(item, req) { runCatching { context.startActivity(item.app.intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } }
                     }
                 }
             }
