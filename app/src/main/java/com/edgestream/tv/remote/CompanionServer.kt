@@ -195,7 +195,13 @@ class CompanionServer(private val context: Context, private val repo: Repository
                 if (PhoneLink.field.value == null) return error(409, "Select a text box on the TV first")
                 PhoneLink.post(PhoneLink.Command.SetField(body.optString("text").take(2_000))); reply(200, OK)
             }
-            "POST /api/play" -> { PhoneLink.post(PhoneLink.Command.Play(body.optString("key"))); reply(200, OK) }
+            "POST /api/play" -> {
+                val key = body.optString("key")
+                val ch = runBlocking { repo.channels.first() }.firstOrNull { it.key == key }
+                    ?: return error(404, "That channel isn't on the TV any more. Refresh the list.")
+                PhoneLink.post(PhoneLink.Command.Play(ch.key))
+                reply(200, JSONObject().put("ok", true).put("message", "Playing ${ch.name}"))
+            }
             "POST /api/open" -> { PhoneLink.post(PhoneLink.Command.Open(body.optString("screen"))); reply(200, OK) }
             "POST /api/source" -> if (!sealed) error(403, RESCAN) else addSource(body).let { (code, b) -> reply(code, b) }
             else -> respond(out, 404, "text/plain", "Not found".toByteArray())

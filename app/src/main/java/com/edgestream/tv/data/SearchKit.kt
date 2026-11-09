@@ -90,11 +90,11 @@ object SearchKit {
                 }
             }
         }
-        ranked.sortWith(compareByDescending<Pair<ChannelEntity, Int>> { it.second }.thenBy { it.first.number })
+        ranked.sortWith(compareByDescending<Pair<ChannelEntity, Int>> { it.second }.thenBy { ChannelNumbers.lcn(it.first) })
         for ((ch, _) in ranked) {
             if (out.size >= limit) break
             val group = NameCleaner.tidyGroup(ch.groupName)
-            val detail = if (group.isBlank()) "Channel ${ch.number}" else "$group  ·  ${ch.number}"
+            val detail = if (group.isBlank()) "Channel ${ChannelNumbers.lcn(ch)}" else "$group  ·  ${ChannelNumbers.lcn(ch)}"
             // One suggestion per channel name: providers often carry the same feed many times.
             if (seen.add("n:${ch.name.lowercase()}")) {
                 out.add(SearchSuggestion(ch.name, detail, query = ch.name, channelKey = ch.key))

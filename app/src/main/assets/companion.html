@@ -228,6 +228,7 @@
       <svg class="i"><use href="#i-search"/></svg>
       <input id="chSearch" type="search" placeholder="Search channels" enterkeyhint="search">
     </div>
+    <div class="note" id="chMsg"></div>
     <div class="list" id="chList"></div>
   </section>
 
@@ -574,7 +575,7 @@
         <span class="t"><b>${esc(c.name)}</b><span>${esc(c.now || c.group)}</span></span>
         <svg class="i"><use href="#i-chev"/></svg>
       </button>`).join("") : '<p class="empty">No channels found.</p>';
-    box.querySelectorAll("[data-play]").forEach(b => b.onclick = () => { buzz(); api("/api/play", { key: b.dataset.play }).catch(() => {}); });
+    box.querySelectorAll("[data-play]").forEach(b => b.onclick = () => { buzz(); api("/api/play", { key: b.dataset.play }).catch(failed).then(r => note($("#chMsg"), r)); });
   }
 
   // ---- providers ----

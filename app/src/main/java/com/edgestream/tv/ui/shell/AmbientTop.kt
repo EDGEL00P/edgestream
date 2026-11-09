@@ -208,7 +208,7 @@ private fun spotFor(item: BandItem?, tile: Tile, use24h: Boolean): SpotText = wh
             chips = listOfNotNull(if (g.state == Sports.State.LIVE) "LIVE" else null) + g.broadcasts.take(3),
         )
     }
-    is BandItem.Channel -> SpotText("Live TV", item.channel.name, item.now?.let { "Now: $it" }, item.channel.groupName, listOf("Ch ${item.channel.number}"))
+    is BandItem.Channel -> SpotText("Live TV", item.channel.name, item.now?.let { "Now: $it" }, item.channel.groupName, listOf("Ch ${com.edgestream.tv.data.ChannelNumbers.lcn(item.channel)}"))
     is BandItem.Resume -> item.p.let { p ->
         val left = ((p.durationMs - p.positionMs) / 60_000).coerceAtLeast(0)
         SpotText("Continue watching", p.title, "$left min left", null, emptyList())

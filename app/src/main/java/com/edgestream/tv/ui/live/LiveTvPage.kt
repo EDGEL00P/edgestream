@@ -177,7 +177,7 @@ private fun NowStrip(focused: Pair<ChannelEntity, GuideBlock>?, now: Long, use24
                 p.stop <= now -> "EARLIER"
                 else -> "LATER"
             }
-            Text(listOfNotNull(ch?.let { "CH ${it.number}  ${it.name}" }, state.ifEmpty { null }).joinToString("  ·  ").uppercase(),
+            Text(listOfNotNull(ch?.let { "CH ${com.edgestream.tv.data.ChannelNumbers.lcn(it)}  ${it.name}" }, state.ifEmpty { null }).joinToString("  ·  ").uppercase(),
                 color = Edge.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(p?.title ?: ch?.name ?: "Live TV", color = Edge.Text, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val time = p?.let {
@@ -257,7 +257,7 @@ private fun GuideRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AsyncImage(ch.logo, null, Modifier.size(width = 44.dp, height = 28.dp), contentScale = ContentScale.Fit)
-            Text("${ch.number}", color = Dim, fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
+            Text("${com.edgestream.tv.data.ChannelNumbers.lcn(ch)}", color = Dim, fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
             Text(ch.name, color = Edge.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 6.dp))
         }
