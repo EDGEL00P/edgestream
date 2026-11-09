@@ -579,8 +579,9 @@ private fun StartingScreen(vm: AppViewModel) {
     BackHandler { vm.cancelStarting() }
     val step by vm.startStep.collectAsStateWithLifecycle()
     val poster = vm.startingPoster.collectAsStateWithLifecycle().value
-    com.edgestream.tv.ui.components.EdgeLoader(
-        com.edgestream.tv.data.NameCleaner.tidyTitle(title), step.ifBlank { "Starting" }, progress = null, poster = poster,
+    // An overlay: the screen you picked the title on stays visible under the shade.
+    com.edgestream.tv.ui.components.KineticLoader(
+        com.edgestream.tv.data.NameCleaner.tidyTitle(title), step.ifBlank { "Starting" }, poster,
     )
 }
 
