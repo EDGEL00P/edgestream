@@ -180,10 +180,7 @@ internal fun VoiceButton(vm: AppViewModel, modifier: Modifier = Modifier) {
             },
         contentAlignment = Alignment.Center,
     ) {
-        androidx.compose.material3.Icon(
-            androidx.compose.material.icons.Icons.Rounded.Mic, "Voice",
-            tint = if (focused) Edge.Bg else Edge.Text, modifier = Modifier.size(22.dp),
-        )
+        com.edgestream.tv.ui.components.DockIcon("voice", if (focused) Edge.Bg else Edge.Text, focused)
     }
 }
 

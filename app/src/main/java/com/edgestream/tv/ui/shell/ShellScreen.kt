@@ -28,16 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
-import androidx.compose.material.icons.rounded.CalendarMonth
-import androidx.compose.material.icons.rounded.Cloud
-import androidx.compose.material.icons.rounded.QueryStats
-import androidx.compose.material.icons.rounded.LiveTv
-import androidx.compose.material.icons.rounded.Movie
-import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.SportsSoccer
-import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -72,7 +63,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -116,17 +106,18 @@ private val PANEL_RADIUS = 26.dp
 /** The preview band slides away after this long with the remote idle on the dock. */
 const val BAND_IDLE_MS = 6_000L
 
-private fun Tile.icon(): ImageVector = when (this) {
-    Tile.SEARCH -> Icons.Rounded.Search
-    Tile.SETTINGS -> Icons.Rounded.Settings
-    Tile.PHONE -> Icons.Rounded.PhoneAndroid
-    Tile.APPS -> Icons.Rounded.Apps
-    Tile.LIVE -> Icons.Rounded.LiveTv
-    Tile.SPORTS -> Icons.Rounded.SportsSoccer
-    Tile.MOVIES -> Icons.Rounded.Movie
-    Tile.WEATHER -> Icons.Rounded.Cloud
-    Tile.ODDS -> Icons.Rounded.QueryStats
-    Tile.CALENDAR -> Icons.Rounded.CalendarMonth
+/** The tile's animated dock icon (see [com.edgestream.tv.ui.components.DockIcon]). */
+private fun Tile.lottie(): String = when (this) {
+    Tile.SEARCH -> "search"
+    Tile.SETTINGS -> "settings"
+    Tile.PHONE -> "remote"
+    Tile.APPS -> "apps"
+    Tile.LIVE -> "live"
+    Tile.SPORTS -> "sports"
+    Tile.MOVIES -> "ondemand"
+    Tile.WEATHER -> "weather"
+    Tile.ODDS -> "odds"
+    Tile.CALENDAR -> "calendar"
 }
 
 /**
@@ -506,7 +497,7 @@ private fun UtilityIcon(tile: Tile, requester: FocusRequester, onEvent: (ShellEv
             .remoteClickable { onEvent(ShellEvent.Open(tile)) },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(tile.icon(), tile.label, tint = if (focused) Edge.Bg else Edge.Text, modifier = Modifier.size(22.dp))
+        com.edgestream.tv.ui.components.DockIcon(tile.lottie(), if (focused) Edge.Bg else Edge.Text, focused)
     }
 }
 
@@ -535,7 +526,7 @@ private fun SectionTile(tile: Tile, marked: Boolean, requester: FocusRequester, 
         ) {
             // Icons carry the dock at rest; the focused tile opens out to name itself (tvOS/Tizen),
             // so the bottom edge stays quiet and every tile still fits inside the safe area.
-            Icon(tile.icon(), tile.label, tint = if (focused) Edge.OnAccent else Edge.Text.copy(alpha = if (marked) 1f else 0.8f), modifier = Modifier.size(22.dp))
+            com.edgestream.tv.ui.components.DockIcon(tile.lottie(), if (focused) Edge.OnAccent else Edge.Text.copy(alpha = if (marked) 1f else 0.8f), focused)
             androidx.compose.animation.AnimatedVisibility(focused) {
                 Text(tile.label, color = Edge.OnAccent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
                     modifier = Modifier.padding(start = 8.dp))
