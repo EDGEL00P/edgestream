@@ -21,6 +21,8 @@ data class AppSettings(
     val lastChannelKey: String? = null,
     /** ISO 639 code such as "en"; blank = stream default. */
     val audioLanguage: String = "",
+    /** Lip-sync correction: delays the audio by this many milliseconds (soundbar/receiver lag). */
+    val audioDelayMs: Int = 0,
     val subtitleLanguage: String = "",
     val subtitlesOn: Boolean = false,
     /** Generate English captions on the TV from the programme's audio. */
@@ -116,6 +118,7 @@ class Settings(context: Context) {
         bufferMs = prefs.getInt("bufferMs", prefs.getInt("buffer", 2) * 1_000).let { if (it < 1_500 || it == 2_000 || it == 4_000) 6_000 else it }, // 2 s / 4 s defaults were too thin a live cushion
         lastChannelKey = prefs.getString("lastChannel", null),
         audioLanguage = prefs.getString("audioLang", "") ?: "",
+        audioDelayMs = prefs.getInt("audioDelayMs", 0).coerceIn(0, 500),
         subtitleLanguage = prefs.getString("subLang", "") ?: "",
         subtitlesOn = prefs.getBoolean("subsOn", false),
         autoCaptions = prefs.getBoolean("autoCaptions", false),
@@ -172,6 +175,7 @@ class Settings(context: Context) {
             .putInt("bufferMs", s.bufferMs)
             .putString("lastChannel", s.lastChannelKey)
             .putString("audioLang", s.audioLanguage)
+            .putInt("audioDelayMs", s.audioDelayMs)
             .putString("subLang", s.subtitleLanguage)
             .putBoolean("subsOn", s.subtitlesOn)
             .putBoolean("autoCaptions", s.autoCaptions)

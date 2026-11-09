@@ -247,6 +247,8 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
 
     /** Captions generated from the audio for streams without subtitles (see [AutoCaptions]). */
     val captions = AutoCaptions(context)
+    /** Lip-sync correction, applied in the audio sink (see [AudioDelayProcessor]). */
+    val audioDelay = AudioDelayProcessor()
 
     private val exoLazy = lazy { buildExo() }
     val exo: ExoPlayer by exoLazy
@@ -283,12 +285,12 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
             .build()
         // NextLib adds FFmpeg decoders (DTS/TrueHD/FLAC/ALAC/Opus/Vorbis/MP2…) behind the platform ones.
         val renderers = object : io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory(context) {
-            // Same sink as the default, plus a tee that hands decoded audio to the captioner.
+            // Same sink as the default, plus a lip-sync delay and a tee for the captioner.
             override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean) =
                 androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                    .setAudioProcessors(arrayOf(androidx.media3.exoplayer.audio.TeeAudioProcessor(captions)))
+                    .setAudioProcessors(arrayOf(audioDelay, androidx.media3.exoplayer.audio.TeeAudioProcessor(captions)))
                     .build()
         }
             // Hardware decoders and Dolby/DTS passthrough first; FFmpeg only when they can't play a track.
@@ -358,6 +360,8 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
     /** Preferred audio/subtitle languages and whether subtitles start switched on. */
     fun applyPreferences(s: com.edgestream.tv.data.AppSettings) {
         captions.setEnabled(s.autoCaptions)
+        // Read at configure time, so the delay applies from the next stream.
+        audioDelay.delayMs = s.audioDelayMs
         trackSelector.parameters = trackSelector.buildUponParameters().setTunnelingEnabled(tunnelFor(s.tunneling, _state.value.isLive)).build()
         // Only touch the player if it has actually been created; otherwise first playback will
         // read these values when it is built.

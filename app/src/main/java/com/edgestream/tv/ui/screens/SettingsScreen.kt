@@ -393,6 +393,11 @@ private fun SettingsPageContent(vm: AppViewModel, page: SettingsPage) {
                 item { Toggle("Match Frame Rate", "Switches the TV to 24, 25, 50 or 60 Hz to match the video. Removes judder; the screen blanks briefly on a change.", s.matchFrameRate, icon = Icons.Rounded.SlowMotionVideo) { set { it.copy(matchFrameRate = !it.matchFrameRate) } } }
                 item { Toggle("Tunnelled Playback", "Hardware audio and video sync. Smoother on SHIELD; turn it off if a stream stutters or has no sound.", s.tunneling, icon = Icons.Rounded.Cable) { set { it.copy(tunneling = !it.tunneling) } } }
                 item { Toggle("Strip Dolby Vision", "Skip Dolby Vision tracks and play the HEVC HDR10 base layer. DV freezes some decoders — turn this off only if you want the DV layer.", s.stripDolbyVision, icon = Icons.Rounded.MovieFilter) { set { it.copy(stripDolbyVision = !it.stripDolbyVision) } } }
+                item {
+                    Cycle("Audio Delay", if (s.audioDelayMs == 0) "Off" else "${s.audioDelayMs} ms", "Lip-sync correction for soundbars and receivers whose sound arrives before the picture. Applies from the next thing you play.", icon = Icons.Rounded.Schedule) {
+                        set { it.copy(audioDelayMs = next(listOf(0, 40, 80, 120, 160, 200, 260, 320, 400), it.audioDelayMs)) }
+                    }
+                }
                 item { Toggle("Play Next Episode", "When an episode ends, the next one starts on its own.", s.autoNextEpisode, icon = Icons.Rounded.SkipNext) { set { it.copy(autoNextEpisode = !it.autoNextEpisode) } } }
                 item { Toggle("Skip Intros and Credits", "Uses TheIntroDB's community timestamps. Sends the title's IMDb or TMDB id to theintrodb.org; no account needed.", s.useIntroDb, icon = Icons.Rounded.MovieFilter) { set { it.copy(useIntroDb = !it.useIntroDb) } } }
                 item { PanelSection("Audio & Subtitles") }
