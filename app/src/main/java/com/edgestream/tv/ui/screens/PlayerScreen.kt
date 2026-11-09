@@ -273,13 +273,23 @@ fun PlayerScreen(vm: AppViewModel) {
     ) {
         VideoSurface(vm.player, Modifier.fillMaxSize(), frostVideo = frostVideo)
 
-        // Skip intro / skip credits pills for episodes, floating over the picture.
+        // Skip intro / recap / credits pills, floating over the picture. One fetch feeds both
+        // overlays: Up Next opens where the credits start and stands in for "Skip credits".
+        val vod = np as? NowPlaying.Vod
+        val segments by produceState<com.edgestream.tv.data.IntroSegments?>(
+            null, vod?.key, settings.useIntroDb, vod?.imdbId, vod?.tmdbId, vod?.season, vod?.episode,
+        ) {
+            value = if (vod != null && settings.useIntroDb) {
+                com.edgestream.tv.data.TheIntroDb.forPlayback(vod.imdbId, vod.tmdbId, vod.season, vod.episode)
+            } else null
+        }
+        var upNextShowing by remember(vod?.key) { mutableStateOf(false) }
         VodSkips(
-            vm, np, tick, rootFocus,
+            vm, np, tick, rootFocus, segments, upNextShowing,
             onFocus = { skipFocused = it },
             Modifier.align(Alignment.BottomStart).padding(bottom = 96.dp, start = 48.dp),
         )
-        UpNextCard(vm, np, tick)
+        UpNextCard(vm, np, tick, segments?.credits?.firstOrNull()?.startMs, onShowing = { upNextShowing = it })
 
         // Over the frozen picture: what is happening, and for live TV how full the cushion is.
         // Once the picture actually plays, the loader goes whatever the buffering flag says.
@@ -489,48 +499,23 @@ private fun InfoToast(
 private fun VodSkips(
     vm: AppViewModel, np: NowPlaying?, tick: androidx.compose.runtime.State<Long>,
     rootFocus: FocusRequester,
+    segments: com.edgestream.tv.data.IntroSegments?,
+    upNextShowing: Boolean,
     onFocus: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val vod = np as? NowPlaying.Vod ?: return
-    val settings by vm.settings.collectAsStateWithLifecycle()
     val seriesKey = vod.key.substringBefore(":E:", "")
-    val segments by produceState<com.edgestream.tv.data.IntroSegments?>(
-        null, vod.key, settings.useIntroDb, vod.imdbId, vod.tmdbId, vod.season, vod.episode,
-    ) {
-        value = if (settings.useIntroDb) {
-            com.edgestream.tv.data.TheIntroDb.forPlayback(vod.imdbId, vod.tmdbId, vod.season, vod.episode)
-        } else null
-    }
     tick.value // the 400 ms ticker refreshes position here, scoped to this overlay
     val exo = vm.player.exo
     val position = exo.currentPosition
     val duration = exo.duration.coerceAtLeast(0)
-    val external = segments
-    val localIntro = if (external?.intro.isNullOrEmpty() && seriesKey.isNotEmpty() && seriesKey != vod.key) {
+    val localIntro = if (segments?.intro.isNullOrEmpty() && seriesKey.isNotEmpty() && seriesKey != vod.key) {
         com.edgestream.tv.data.IntroSkip.forSeries(seriesKey)
     } else null
-    val active = { segment: com.edgestream.tv.data.IntroSegment ->
-        position >= segment.startMs && position < (segment.endMs ?: duration)
-    }
-    val pills = buildList {
-        external?.intro?.firstOrNull(active)?.let { add("Skip intro" to (it.endMs ?: duration)) }
-        external?.recap?.firstOrNull(active)?.let { add("Skip recap" to (it.endMs ?: duration)) }
-        external?.credits?.firstOrNull(active)?.let {
-            add("Skip credits" to (it.endMs ?: (duration - 400).coerceAtLeast(position + 1)))
-        }
-        external?.preview?.firstOrNull(active)?.let { add("Skip preview" to (it.endMs ?: duration)) }
-        if (none { it.first == "Skip intro" } && localIntro != null && position < localIntro) {
-            add("Skip intro" to localIntro)
-        }
-        if (none { it.first == "Skip credits" } && external?.credits.isNullOrEmpty() &&
-            duration > 20 * 60_000L && duration - position < 2 * 60_000L
-        ) {
-            add("Skip credits" to (duration - 400).coerceAtLeast(position + 1))
-        }
-        // NOTE: media chapters aren't exposed by this Media3 version (1.11.1 Timeline.Window
-        // has no chapters field), so chapter jumping stays with the D-pad seek keys.
-    }
+    // Media chapters aren't exposed by Media3 1.11.1 (Timeline.Window has no chapters field),
+    // so chapter jumping stays with the D-pad seek keys.
+    val pills = com.edgestream.tv.data.IntroSkip.pills(position, duration, segments, localIntro, upNextShowing)
     if (pills.isEmpty()) return
 
     // The pills take focus themselves (Netflix-style): OK skips, Back returns to the player root.
@@ -580,6 +565,8 @@ private fun SkipPill(
 @Composable
 private fun UpNextCard(
     vm: AppViewModel, np: NowPlaying?, tick: androidx.compose.runtime.State<Long>,
+    creditsStartMs: Long?,
+    onShowing: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val vod = np as? NowPlaying.Vod ?: return
@@ -591,9 +578,12 @@ private fun UpNextCard(
     val remaining = duration - exo.currentPosition
     var dismissed by remember(vod.key) { mutableStateOf(false) }
     val suppress by vm.suppressAutoNext.collectAsStateWithLifecycle()
-    if (duration < 60_000L || remaining > 30_000L || remaining < 0L || dismissed || suppress == vod.key) return
+    // From where the credits start when TheIntroDB knows it, else the last 30 s.
+    val inCredits = creditsStartMs != null && exo.currentPosition >= creditsStartMs && creditsStartMs < duration
+    if (duration < 60_000L || (remaining > 30_000L && !inCredits) || remaining < 0L || dismissed || suppress == vod.key) return
     val upNext by produceState<AppViewModel.UpNext?>(null, vod.key) { value = runCatching { vm.upNextForCurrent() }.getOrNull() }
     val next = upNext ?: return
+    androidx.compose.runtime.DisposableEffect(vod.key) { onShowing(true); onDispose { onShowing(false) } }
 
     // A real countdown from when the card appears, one second at a time.
     var secondsLeft by remember(vod.key) { androidx.compose.runtime.mutableIntStateOf(UP_NEXT_SECONDS) }

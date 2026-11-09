@@ -1004,7 +1004,7 @@ class Repository(
             PublicApis.Meta(
                 plot = it.plot, backdrop = it.backdrop, cast = it.cast, director = it.director, genre = it.genre,
                 durationMin = it.durationSecs?.let { s -> (s / 60).toInt() }, rating = it.rating,
-                year = it.releaseDate?.take(4), trailer = it.trailer,
+                year = it.releaseDate?.take(4), trailer = it.trailer, tmdbId = it.tmdbId?.toIntOrNull(),
             )
         } ?: PublicApis.Meta(plot = item.plot, rating = item.rating, year = item.year)
         var meta = provider.orElse(catalogueMeta(item)).orElse(catalogueSeeds[item.key]).orElse(PublicApis.tmdb(settings.value.tmdbApiKey, item.name, isSeries, item.year))
@@ -1089,6 +1089,16 @@ class Repository(
     suspend fun metadataByKey(key: String): PublicApis.Meta? {
         val seriesKey = key.substringBefore(":E:", key)
         return vodByKey(seriesKey)?.let { metadata(it) }
+    }
+
+    private val showImdb = ConcurrentHashMap<String, String>()
+
+    /** The IMDb id of the series behind an episode key, via TVMaze; null for films or no match. */
+    suspend fun seriesImdb(key: String): String? = withContext(Dispatchers.IO) {
+        val seriesKey = key.substringBefore(":E:", "").ifEmpty { return@withContext null }
+        showImdb[seriesKey]?.let { return@withContext it }
+        val series = vodByKey(seriesKey)?.takeIf { it.kind == VodKind.SERIES } ?: return@withContext null
+        PublicApis.tvMazeImdb(series.name, series.year)?.also { showImdb[seriesKey] = it }
     }
 
     // ---- user data -------------------------------------------------------------------------

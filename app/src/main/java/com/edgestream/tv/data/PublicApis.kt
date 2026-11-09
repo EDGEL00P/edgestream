@@ -130,6 +130,16 @@ object PublicApis {
         )
     }
 
+    /**
+     * A show's IMDb id from TVMaze (keyless), for skip-segment lookups when no TMDB key is set.
+     * A known [year] must match the premiere, so a remake under the same name isn't taken.
+     */
+    fun tvMazeImdb(title: String, year: String?): String? = runCatching {
+        val json = getJson("https://api.tvmaze.com/singlesearch/shows?q=${enc(cleanTitle(title))}") as? JSONObject ?: return null
+        if (!year.isNullOrBlank() && json.optString("premiered").take(4) != year.take(4)) return null
+        json.optJSONObject("externals")?.optString("imdb")?.takeIf { it.startsWith("tt") }
+    }.getOrNull()
+
     fun tvMazeShow(title: String): Meta? = runCatching {
         val json = getJson("https://api.tvmaze.com/singlesearch/shows?q=${enc(cleanTitle(title))}") as? JSONObject ?: return null
         Meta(

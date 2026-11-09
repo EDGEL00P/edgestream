@@ -1127,10 +1127,16 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
             val resolvedTmdb = tmdbId ?: if (imdbId == null) {
                 runCatching { repo.metadataByKey(key) }.getOrNull()?.tmdbId
             } else null
+            // Skip segments need an id: without a TMDB key, a provider series only has one via TVMaze.
+            val resolvedImdb = imdbId ?: if (resolvedTmdb == null) runCatching { repo.seriesImdb(key) }.getOrNull() else null
+            // Continue Watching and other callers pass only the title ("Show · S1E2").
+            val label = if (season == null || episode == null) episodeLabel.find(title) else null
             stopProgressTracking()
             nowPlaying.value = NowPlaying.Vod(
                 key, title, poster, url, subtitle, saveUrl,
-                imdbId = imdbId, tmdbId = resolvedTmdb, season = season, episode = episode,
+                imdbId = resolvedImdb, tmdbId = resolvedTmdb,
+                season = season ?: label?.groupValues?.get(1)?.toIntOrNull(),
+                episode = episode ?: label?.groupValues?.get(2)?.toIntOrNull(),
             )
             player.play(
                 url, title, isLive = false, startPositionMs = resumeAt,
