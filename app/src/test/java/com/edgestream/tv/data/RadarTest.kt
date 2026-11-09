@@ -1,6 +1,7 @@
 package com.edgestream.tv.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class RadarTest {
@@ -32,5 +33,19 @@ class RadarTest {
         assertEquals(0, Radar.reflectivity(0x00000000))
         assertEquals(0, Radar.reflectivity(0xFFFFFFFF.toInt()))
         assertEquals(0, Radar.reflectivity(0xFF202020.toInt()))
+    }
+
+    @Test
+    fun frameStepsStayInsideTheLoop() {
+        assertEquals(3, Radar.stepFrame(2, 1, 5))
+        assertEquals(0, Radar.stepFrame(0, -1, 5))
+        assertEquals(5, Radar.stepFrame(5, 1, 5))
+        assertEquals(0, Radar.stepFrame(0, 1, 0))
+    }
+
+    @Test
+    fun steppingWithNoFramesDoesNothing() {
+        assertNull(Radar.stepFrame(0, 1, -1))
+        assertNull(Radar.stepFrame(0, -1, -1))
     }
 }

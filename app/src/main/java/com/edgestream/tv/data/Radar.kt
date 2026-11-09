@@ -85,6 +85,10 @@ object Radar {
 
     fun zoomLabel(zoom: Int): String = "${rangeKm(zoom)} KM"
 
+    /** Step a frame index, clamped to the loop. Null when there is nothing to step yet. */
+    fun stepFrame(index: Int, delta: Int, lastIndex: Int): Int? =
+        if (lastIndex < 0) null else (index + delta).coerceIn(0, lastIndex)
+
     /** RainViewer's free radar tiles stop at zoom 7; maps can go closer. */
     private fun radarZoom(zoom: Int): Int = minOf(zoom, 7)
 

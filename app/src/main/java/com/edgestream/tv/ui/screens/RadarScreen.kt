@@ -13,7 +13,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -21,17 +20,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -51,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -80,17 +76,13 @@ import com.edgestream.tv.data.Storm
 import com.edgestream.tv.data.Trackers
 import com.edgestream.tv.ui.AppViewModel
 import com.edgestream.tv.ui.Edge
-import com.edgestream.tv.ui.EdgeShapes
 import com.edgestream.tv.ui.components.EdgeButton
-import com.edgestream.tv.ui.components.FocusSurface
 import com.edgestream.tv.ui.components.Pill
 import com.edgestream.tv.ui.components.WeatherGlyph
-import com.edgestream.tv.ui.glass
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.cos
-import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -108,6 +100,7 @@ fun RadarScreen(vm: AppViewModel) {
     var index by remember { mutableIntStateOf(0) }
     var playing by remember { mutableStateOf(true) }
     val focus = remember { FocusRequester() }
+    val controlsFocus = remember { FocusRequester() }
 
     val detail by produceState<PublicApis.WeatherDetail?>(null, place?.lat, place?.lon) {
         val p = place ?: return@produceState
@@ -175,10 +168,11 @@ fun RadarScreen(vm: AppViewModel) {
             }
         }
 
-        Row(Modifier.fillMaxSize()) {
+        // The map is the full-screen background. Conditions sit on it over a soft shade — no
+        // boxed panel, no solid strip — and the controls are real focusable buttons.
+        Box(Modifier.fillMaxSize()) {
             RadarMap(
                 data = data,
-                detail = detail,
                 analysis = data?.analysis,
                 zoom = zoom,
                 index = index,
@@ -186,18 +180,27 @@ fun RadarScreen(vm: AppViewModel) {
                 use24h = settings.use24h,
                 satellite = settings.radarSatellite,
                 focus = focus,
+                downFocus = controlsFocus,
                 loading = loading,
                 onIndex = { playing = false; index = it },
                 onTogglePlay = { if (data?.frames.orEmpty().isNotEmpty()) playing = !playing },
-                onZoom = { zoom = it },
                 onLatest = {
                     data?.frames?.lastIndex?.takeIf { it >= 0 }?.let { playing = false; index = it }
                 },
                 onDetails = { detailsOpen = true },
-                modifier = Modifier.weight(1f).fillMaxHeight(),
+                modifier = Modifier.fillMaxSize(),
             )
-            // Conditions live in one solid rail beside the map, never floating over it.
-            InfoRail(
+            Box(
+                Modifier.align(Alignment.BottomStart).width(620.dp).height(390.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            0f to Edge.Bg.copy(alpha = SHADE_STRIP),
+                            0.55f to Edge.Bg.copy(alpha = SHADE_TEXT),
+                            1f to Color.Transparent,
+                        ),
+                    ),
+            )
+            RadarHud(
                 detail = detail,
                 simple = simple,
                 analysis = data?.analysis,
@@ -206,8 +209,27 @@ fun RadarScreen(vm: AppViewModel) {
                 warnings = warnings,
                 use24h = settings.use24h,
                 fahrenheit = settings.fahrenheit,
+                modifier = Modifier.align(Alignment.BottomStart).width(520.dp)
+                    .padding(start = 28.dp, bottom = 148.dp),
+            )
+            RadarControls(
+                mapFocus = focus,
+                firstFocus = controlsFocus,
+                playing = playing,
+                hasFrames = data?.frames.orEmpty().isNotEmpty(),
+                zoom = zoom,
+                onTogglePlay = { if (data?.frames.orEmpty().isNotEmpty()) playing = !playing },
+                onStep = { delta ->
+                    Radar.stepFrame(index, delta, data?.frames.orEmpty().lastIndex)?.let {
+                        playing = false; index = it
+                    }
+                },
+                onZoom = { zoom = it },
+                onLatest = {
+                    data?.frames?.lastIndex?.takeIf { it >= 0 }?.let { playing = false; index = it }
+                },
                 onDetails = { detailsOpen = true },
-                modifier = Modifier.width(360.dp).fillMaxHeight(),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 28.dp, bottom = 22.dp),
             )
         }
     }
@@ -230,7 +252,6 @@ fun RadarScreen(vm: AppViewModel) {
 @Composable
 private fun RadarMap(
     data: Radar.Data?,
-    detail: PublicApis.WeatherDetail?,
     analysis: Radar.Analysis?,
     zoom: Int,
     index: Int,
@@ -238,10 +259,10 @@ private fun RadarMap(
     use24h: Boolean,
     satellite: Boolean,
     focus: FocusRequester,
+    downFocus: FocusRequester,
     loading: Boolean,
     onIndex: (Int) -> Unit,
     onTogglePlay: () -> Unit,
-    onZoom: (Int) -> Unit,
     onLatest: () -> Unit,
     onDetails: () -> Unit,
     modifier: Modifier = Modifier,
@@ -261,10 +282,12 @@ private fun RadarMap(
             ), label = "pulse",
         )
     Box(
-        modifier.clip(EdgeShapes.Panel).background(Edge.Bg)
+        modifier.background(Edge.Bg)
             .onFocusChanged { mapFocused = it.isFocused }
             .onPreviewKeyEvent { e ->
-                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                // Only steer the map while the map itself holds focus; otherwise a preview handler
+                // here would swallow the arrow keys meant for the control buttons beside it.
+                if (e.type != KeyEventType.KeyDown || !mapFocused) return@onPreviewKeyEvent false
                 when (e.key) {
                     // At the ends the key is not consumed: focus can leave the map, so the
                     // remote is never trapped inside the radar.
@@ -275,13 +298,13 @@ private fun RadarMap(
                         onIndex(index + 1); true
                     }
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> { onTogglePlay(); true }
-                    Key.DirectionUp -> if (zoom >= 10) false else { onZoom(zoom + 1); true }
-                    Key.DirectionDown -> if (zoom <= 7) false else { onZoom(zoom - 1); true }
+                    // Up/Down are left unconsumed so D-pad focus can travel to the controls.
                     Key.Menu -> { onLatest(); frames.isNotEmpty() }
                     Key.Info -> { onDetails(); true }
                     else -> false
                 }
             }
+            .focusProperties { down = downFocus }
             .focusRequester(focus).focusable(),
     ) {
         if (data != null) {
@@ -363,10 +386,15 @@ private fun RadarMap(
                 }
             }
 
-            Box(Modifier.align(Alignment.TopStart).fillMaxWidth().height(140.dp).background(Brush.verticalGradient(listOf(Edge.Bg.copy(alpha = SHADE_TEXT), Color.Transparent))))
-            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(120.dp).background(Brush.verticalGradient(listOf(Color.Transparent, Edge.Bg.copy(alpha = SHADE_TEXT)))))
+            Box(Modifier.align(Alignment.TopStart).fillMaxWidth().height(170.dp).background(Brush.verticalGradient(listOf(Edge.Bg.copy(alpha = SHADE_TEXT), Color.Transparent))))
+            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(560.dp).background(Brush.verticalGradient(
+                0f to Color.Transparent,
+                0.30f to Edge.Bg.copy(alpha = SHADE_TEXT * 0.25f),
+                0.65f to Edge.Bg.copy(alpha = SHADE_TEXT * 0.65f),
+                1f to Edge.Bg.copy(alpha = SHADE_STRIP),
+            )))
             Column(Modifier.align(Alignment.TopStart).padding(horizontal = 24.dp, vertical = 18.dp)) {
-                Text(data.place, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(data.place, style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Black), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     listOfNotNull(
                         frames.getOrNull(index)?.let { "Radar ${time(it.time, use24h)}" } ?: if (loading) "Loading radar…" else null,
@@ -403,7 +431,8 @@ private fun RadarMap(
 
             if (frames.isNotEmpty()) {
                 Row(
-                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp),
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                        .padding(start = 28.dp, end = 28.dp, bottom = 100.dp),
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -425,11 +454,6 @@ private fun RadarMap(
                         }
                     }
                 }
-                Text(
-                    "OK pause  ·  ←/→ frames  ·  ↑/↓ zoom  ·  Menu latest  ·  Info details",
-                    style = MaterialTheme.typography.labelSmall, color = Edge.Text.copy(alpha = 0.72f),
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 24.dp, bottom = 52.dp),
-                )
             }
         } else {
             Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -448,7 +472,7 @@ private fun RadarMap(
 }
 
 @Composable
-private fun InfoRail(
+private fun RadarHud(
     detail: PublicApis.WeatherDetail?,
     simple: PublicApis.Weather?,
     analysis: Radar.Analysis?,
@@ -457,30 +481,13 @@ private fun InfoRail(
     warnings: List<Trackers.Warning>,
     use24h: Boolean,
     fahrenheit: Boolean,
-    onDetails: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier.background(Edge.Bg.copy(alpha = SHADE_STRIP))
-            .verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Now", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1)
-            FocusSurface(
-                onClick = onDetails,
-                modifier = Modifier.height(28.dp),
-                shape = EdgeShapes.Chip,
-                color = Edge.PanelHi,
-                focusedColor = Edge.Accent.copy(alpha = 0.28f),
-                focusScale = 1.03f,
-                glow = false,
-            ) {
-                Text(
-                    "Details", style = MaterialTheme.typography.labelMedium,
-                    color = Edge.Text, modifier = Modifier.align(Alignment.Center).padding(horizontal = 10.dp),
-                )
-            }
-        }
+    Column(modifier) {
+        Text(
+            "RIGHT NOW", style = MaterialTheme.typography.labelSmall,
+            color = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA), modifier = Modifier.padding(bottom = 6.dp),
+        )
         if (detail == null) {
             Column(Modifier.padding(top = 8.dp)) {
                 if (simple != null) {
@@ -541,8 +548,11 @@ private fun InfoRail(
                     lightningLevel = lightning.level,
                     nearestStormKm = nearestStormKm,
                 )
-                Section("Risk")
-                RiskRow("Storms", detail.stormRisk ?: "Unknown")
+                Text(
+                    "RISK", style = MaterialTheme.typography.labelSmall,
+                    color = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA), modifier = Modifier.padding(top = 10.dp),
+                )
+                RiskRow("Storms", detail.stormRisk)
                 RiskRow("Lightning", lightning.level)
                 RiskRow("Hail", hail.levelLabel.lowercase())
                 Text(
@@ -556,22 +566,13 @@ private fun InfoRail(
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
-
-            Spacer(Modifier.height(8.dp))
-            Row {
-                Metric("Humidity", "${detail.humidity}%")
-                Metric("Dew point", temp(detail.dewC, fahrenheit))
-                Metric("UV index", "%.1f".format(detail.uv))
-            }
-            Row {
-                Metric("Wind", "${detail.windKph.roundToInt()} km/h ${compass(detail.windDir)}")
-                Metric("Gusts", "${detail.gustKph.roundToInt()} km/h")
-                Metric("Pressure", "${detail.pressureHpa.roundToInt()} hPa")
-            }
         }
 
-        Spacer(Modifier.height(14.dp))
-        Section("Radar")
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "RADAR", style = MaterialTheme.typography.labelSmall,
+            color = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA), modifier = Modifier.padding(bottom = 4.dp),
+        )
         if (analysis == null) {
             Text("Waiting for the first radar frame…", style = MaterialTheme.typography.bodyMedium, color = Edge.Dim, modifier = Modifier.padding(top = 6.dp))
         } else if (analysis.nearestKm == null) {
@@ -582,7 +583,7 @@ private fun InfoRail(
                 style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp),
             )
             Text(
-                "Coverage ${if (analysis.nearestKm != null && analysis.coveragePct == 0) "<1%" else "${analysis.coveragePct}%"} within $rangeKm km  ·  max ${analysis.maxDbz ?: "—"} dBZ",
+                "Coverage ${if (analysis.coveragePct == 0) "<1%" else "${analysis.coveragePct}%"} within $rangeKm km  ·  max ${analysis.maxDbz ?: "—"} dBZ",
                 style = MaterialTheme.typography.labelMedium, color = Edge.Dim,
             )
             analysis.motionKph?.let {
@@ -603,6 +604,39 @@ private fun InfoRail(
         }
 
         Spacer(Modifier.height(4.dp))
+    }
+}
+
+/** Real focusable controls: zoom, frames and details no longer depend on Menu/Info keys. */
+@Composable
+private fun RadarControls(
+    mapFocus: FocusRequester,
+    firstFocus: FocusRequester,
+    playing: Boolean,
+    hasFrames: Boolean,
+    zoom: Int,
+    onTogglePlay: () -> Unit,
+    onStep: (Int) -> Unit,
+    onZoom: (Int) -> Unit,
+    onLatest: () -> Unit,
+    onDetails: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier.focusProperties { up = mapFocus },
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        EdgeButton(
+            if (playing) "Pause" else "Play", { if (hasFrames) onTogglePlay() },
+            Modifier.focusRequester(firstFocus), primary = true,
+        )
+        EdgeButton("Earlier", { if (hasFrames) onStep(-1) })
+        EdgeButton("Later", { if (hasFrames) onStep(1) })
+        EdgeButton("Zoom −", { if (zoom > 7) onZoom(zoom - 1) })
+        EdgeButton("Zoom +", { if (zoom < 10) onZoom(zoom + 1) })
+        EdgeButton("Latest", { if (hasFrames) onLatest() })
+        EdgeButton("Details", onDetails)
     }
 }
 
@@ -668,9 +702,8 @@ private fun RadarDetailsDialog(
                 },
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Pill("WEATHER WORKSTATION", color = Edge.Accent)
                 Text(
-                    "  ${detail?.city ?: "Location"}", style = MaterialTheme.typography.headlineSmall,
+                    detail?.city ?: "Location", style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black),
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                 )
                 Text(
@@ -691,6 +724,8 @@ private fun RadarDetailsDialog(
                     DetailRow("Cloud", detail?.let { "${it.cloudPct}%" } ?: "—")
                     DetailRow("UV index", detail?.let { "%.1f".format(it.uv) } ?: "—")
                     DetailRow("Rain rate", detail?.let { "%.1f mm/h".format(it.rainRateMmH) } ?: "—")
+                    DetailRow("Wind", detail?.let { "${it.windKph.roundToInt()} km/h ${compass(it.windDir)}" } ?: "—")
+                    DetailRow("Gusts", detail?.let { "${it.gustKph.roundToInt()} km/h" } ?: "—")
                     DetailRow("Sunshine", detail?.let { "${it.sunshineMin.roundToInt()} min/15m" } ?: "—")
 
                     Section("STORM POTENTIAL")
@@ -775,14 +810,6 @@ private fun RadarDetailsDialog(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun RowScope.Metric(label: String, value: String) {
-    Column(Modifier.padding(vertical = 4.dp).weight(1f)) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = Edge.Faint, maxLines = 1)
-        Text(value, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
