@@ -291,11 +291,10 @@ fun PlayerScreen(vm: AppViewModel) {
         )
         UpNextCard(vm, np, tick, segments?.credits?.firstOrNull()?.startMs, onShowing = { upNextShowing = it })
 
-        // Over the frozen picture: what is happening, and for live TV how full the cushion is.
-        // Once the picture actually plays, the loader goes whatever the buffering flag says.
+        // Over the frozen picture, and for live TV how full the cushion is. Once the picture
+        // actually plays, the loader goes whatever the buffering flag says.
         if (st.buffering && st.error == null && !st.isPlaying) com.edgestream.tv.ui.components.EdgeLoader(
             title = st.title,
-            step = when { st.rejoining -> "Rejoining live"; st.isLive -> "Buffering"; else -> "Loading" },
             progress = if (st.isLive && st.cushionMs > 0) (st.bufferedMs.toFloat() / st.cushionMs).coerceIn(0f, 1f) else null,
             poster = (np as? NowPlaying.Vod)?.poster ?: (np as? NowPlaying.Live)?.channel?.logo,
             dim = 0.6f,

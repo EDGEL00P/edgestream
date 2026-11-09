@@ -35,7 +35,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -49,17 +48,15 @@ import kotlin.random.Random
 private val Wordmark = FontFamily(Font(R.font.bebasneue_regular))
 
 /**
- * The loading screen: the EdgeStream wordmark with a broadcast-glitch flicker (colour channels
- * slipping apart, the odd band of the picture torn sideways, scanlines), what's happening in
- * words, a progress bar that shows real progress when there is one, and the connection's
- * measured speed. Shown over [background] (the highlight reel, or the frozen picture).
+ * The loading screen: the EdgeStream wordmark is the whole of it. Its letters strobe on as the
+ * load progresses and glitch bursts tear through it, over scanlines and [background] (the
+ * highlight reel, or the frozen picture).
  *
- * @param progress 0..1 when the step is measurable (a live cushion filling), null otherwise.
+ * @param progress 0..1 when the load is measurable (a live cushion filling), null otherwise.
  */
 @Composable
 fun EdgeLoader(
     title: String?,
-    step: String,
     progress: Float?,
     poster: String? = null,
     modifier: Modifier = Modifier,
@@ -87,7 +84,6 @@ fun EdgeLoader(
                 Text(it, color = Color.White, fontSize = if (poster.isNullOrBlank()) 26.sp else 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = if (poster.isNullOrBlank()) 18.dp else 12.dp).widthIn(max = 760.dp))
             }
-            LoadStatus(step, progress, Modifier.padding(top = 18.dp).width(620.dp))
         }
     }
 }
@@ -180,20 +176,3 @@ internal fun strobeLit(progress: Float?, elapsedMs: Long, letters: Int): StrobeL
 
 private const val STROBE_MS = 55L
 internal const val STROBE_CHASE_MS = 1_800L
-
-/** The step and how far along it is, under the wordmark, with the measured connection speed. */
-@Composable
-private fun LoadStatus(step: String, progress: Float?, modifier: Modifier) {
-    val context = LocalContext.current
-    var mbps by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(Unit) {
-        val meter = androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.getSingletonInstance(context)
-        while (true) { mbps = meter.bitrateEstimate / 1_000_000f; kotlinx.coroutines.delay(500) }
-    }
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Text(step.uppercase(), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp, maxLines = 1)
-        Spacer(Modifier.weight(1f))
-        if (mbps > 0f) Text("%.1f Mbps".format(mbps), color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp, modifier = Modifier.padding(end = 16.dp))
-        if (progress != null) Text("${(progress * 100).toInt()}%", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-    }
-}
