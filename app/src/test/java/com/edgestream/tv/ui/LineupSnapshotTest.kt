@@ -26,8 +26,8 @@ class LineupSnapshotTest {
             "b" to CleanName("Kayo 1"),
         )
         val rawNames = mapOf("a" to "AU| FOX SPORTS 501 HD [BK]", "b" to "AU| KAYO 1")
-        val json = LineupSnapshot.toJson(display, badges, rawNames)
-        val back = LineupSnapshot.fromJson(json)
+        val text = LineupSnapshot.serialize(display, badges, rawNames)
+        val back = LineupSnapshot.deserialize(text)
         assertNotNull(back)
         // ChannelEntity equality covers every field the snapshot carries (id is 0 on both sides).
         assertEquals(display, back!!.display)
@@ -37,10 +37,10 @@ class LineupSnapshotTest {
     }
 
     @Test fun unreadableOrWrongVersionIsNull() {
-        assertNull(LineupSnapshot.fromJson("not json"))
-        assertNull(LineupSnapshot.fromJson("{}"))
-        assertNull(LineupSnapshot.fromJson("""{"v":2}"""))
+        assertNull(LineupSnapshot.deserialize("not json"))
+        assertNull(LineupSnapshot.deserialize(""))
+        assertNull(LineupSnapshot.deserialize("v2\n123\n"))
         // An empty display parses (load() is what gates emptiness and age before use).
-        assertTrue(LineupSnapshot.fromJson("""{"v":1,"display":[]}""")!!.display.isEmpty())
+        assertTrue(LineupSnapshot.deserialize("v1\n123\n")!!.display.isEmpty())
     }
 }

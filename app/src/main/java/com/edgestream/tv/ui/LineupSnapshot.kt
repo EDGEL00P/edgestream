@@ -5,16 +5,23 @@ import com.edgestream.tv.data.CleanName
 import com.edgestream.tv.data.db.ChannelEntity
 import java.io.File
 import kotlinx.coroutines.launch
-import org.json.JSONArray
-import org.json.JSONObject
 
 /**
  * The finished lineup (cleaned names, badges, raw names) persisted to disk, so the app opens with
  * every channel ready instantly instead of waiting ~27 s for the catalogue and name cleaning.
  * The snapshot only ever stands in until the real pipeline's first emission replaces it.
+ *
+ * The file is a private line format, not JSON: 6k+ channels parse in milliseconds (org.json needed
+ * seconds on the SHIELD). Fields are separated by \u0001 and empty values are marked with \u0002 —
+ * control characters no provider name or URL contains; values are sanitized on write so a stray
+ * separator or newline can never corrupt a row.
  */
 internal object LineupSnapshot {
     private const val FILE = "lineup-snapshot.json"
+    /** \u0001: a control character no provider name or URL can contain. */
+    private val SEP = 1.toChar()
+    /** \u0002: marks an empty field, distinct from a blank-but-present value. */
+    private val NIL = 2.toChar().toString()
     /** A snapshot older than this is ignored: the provider's list has surely moved on. */
     private const val MAX_AGE_MS = 14L * 24 * 60 * 60 * 1000
 
@@ -31,76 +38,74 @@ internal object LineupSnapshot {
     fun file(context: Context): File = File(context.filesDir, FILE)
 
     fun save(context: Context, catalog: ChannelCatalog) {
-        runCatching { file(context).writeText(toJson(catalog.display, catalog.badges, catalog.rawNames)) }
+        runCatching { file(context).writeText(serialize(catalog.display, catalog.badges, catalog.rawNames)) }
     }
 
     /** The snapshot, or null when there is none, it is unreadable, or it is too old. */
     fun load(context: Context): ChannelCatalog? {
         val f = file(context)
         if (!f.exists()) return null
-        val parsed = runCatching { fromJson(f.readText()) }.getOrNull() ?: return null
+        val parsed = runCatching { deserialize(f.readText()) }.getOrNull() ?: return null
         return parsed.takeIf { it.display.isNotEmpty() && System.currentTimeMillis() - it.at < MAX_AGE_MS }
     }
 
-    // ---- JSON -------------------------------------------------------------------------------
+    // ---- the private line format ---------------------------------------------------------------
 
-    private fun JSONObject.putOpt(key: String, value: Any?) { put(key, value ?: JSONObject.NULL) }
+    private fun clean(s: String?): String? =
+        s?.replace(SEP, ' ')?.replace('\n', ' ')?.replace('\r', ' ')?.ifBlank { null }
 
-    internal fun toJson(display: List<ChannelEntity>, badges: Map<String, CleanName>, rawNames: Map<String, String>): String {
-        val root = JSONObject()
-        root.put("v", 1)
-        root.put("at", System.currentTimeMillis())
-        val chans = JSONArray()
+    private fun field(s: String): String? = if (s == NIL) null else s.ifBlank { null }
+
+    internal fun serialize(display: List<ChannelEntity>, badges: Map<String, CleanName>, rawNames: Map<String, String>): String = buildString {
+        append("v1\n").append(System.currentTimeMillis()).append('\n')
         display.forEach { ch ->
-            val o = JSONObject()
-            o.put("key", ch.key).put("sourceId", ch.sourceId).put("name", ch.name).put("groupName", ch.groupName)
-            o.putOpt("logo", ch.logo).put("streamUrl", ch.streamUrl).putOpt("epgId", ch.epgId)
-            o.put("number", ch.number).put("catchupDays", ch.catchupDays).putOpt("catchupSource", ch.catchupSource)
-            o.putOpt("xtreamStreamId", ch.xtreamStreamId).put("offline", ch.offline).putOpt("tvgId", ch.tvgId).putOpt("identity", ch.identity)
-            chans.put(o)
+            append('C').append(SEP).append(ch.key).append(SEP).append(ch.sourceId).append(SEP)
+            append(clean(ch.name) ?: "").append(SEP).append(clean(ch.groupName) ?: "").append(SEP)
+            append(clean(ch.logo) ?: NIL).append(SEP).append(ch.streamUrl).append(SEP)
+            append(clean(ch.epgId) ?: NIL).append(SEP).append(ch.number).append(SEP).append(ch.catchupDays).append(SEP)
+            append(clean(ch.catchupSource) ?: NIL).append(SEP)
+            append(ch.xtreamStreamId?.toString() ?: NIL).append(SEP)
+            append(if (ch.offline) 1 else 0).append(SEP)
+            append(clean(ch.tvgId) ?: NIL).append(SEP).append(clean(ch.identity) ?: NIL).append('\n')
         }
-        root.put("display", chans)
-        val b = JSONObject()
-        badges.forEach { (k, clean) ->
-            b.put(k, JSONObject().put("title", clean.title).putOpt("quality", clean.quality).put("tags", JSONArray(clean.tags)))
+        badges.forEach { (k, c) ->
+            append('B').append(SEP).append(k).append(SEP).append(clean(c.title) ?: "").append(SEP)
+            append(clean(c.quality) ?: NIL).append(SEP).append(c.tags.joinToString(",") { it.replace(',', ' ') }).append('\n')
         }
-        root.put("badges", b)
-        val raw = JSONObject()
-        rawNames.forEach { (k, v) -> raw.put(k, v) }
-        root.put("rawNames", raw)
-        return root.toString()
+        rawNames.forEach { (k, v) -> append('R').append(SEP).append(k).append(SEP).append(clean(v) ?: "").append('\n') }
     }
 
-    internal fun fromJson(text: String): ChannelCatalog? = runCatching {
-        val root = JSONObject(text)
-        if (root.optInt("v") != 1) return@runCatching null
-        fun JSONObject.strOpt(key: String): String? = if (isNull(key)) null else optString(key).ifBlank { null }
-        val chans = ArrayList<ChannelEntity>()
-        val arr = root.optJSONArray("display") ?: return@runCatching null
-        for (i in 0 until arr.length()) {
-            val o = arr.optJSONObject(i) ?: continue
-            val key = o.optString("key")
-            if (key.isBlank()) continue
-            chans += ChannelEntity(
-                key = key, sourceId = o.optLong("sourceId"), name = o.optString("name"), groupName = o.optString("groupName"),
-                logo = o.strOpt("logo"), streamUrl = o.optString("streamUrl"), epgId = o.strOpt("epgId"),
-                number = o.optInt("number"), catchupDays = o.optInt("catchupDays"),
-                catchupSource = o.strOpt("catchupSource"),
-                xtreamStreamId = if (o.isNull("xtreamStreamId")) null else o.optLong("xtreamStreamId"),
-                offline = o.optBoolean("offline"), tvgId = o.strOpt("tvgId"), identity = o.strOpt("identity"),
-            )
-        }
+    internal fun deserialize(text: String): ChannelCatalog? {
+        val lines = text.split('\n')
+        if (lines.firstOrNull() != "v1") return null
+        val at = lines.getOrNull(1)?.toLongOrNull() ?: return null
+        val display = ArrayList<ChannelEntity>(4096)
         val badges = HashMap<String, CleanName>()
-        root.optJSONObject("badges")?.let { b ->
-            b.keys().forEach { k ->
-                val o = b.optJSONObject(k) ?: return@forEach
-                val tags = ArrayList<String>()
-                o.optJSONArray("tags")?.let { t -> for (i in 0 until t.length()) tags += t.optString(i) }
-                badges[k] = CleanName(o.optString("title"), o.strOpt("quality"), tags)
+        val raws = HashMap<String, String>()
+        for (i in 2 until lines.size) {
+            val line = lines[i]
+            if (line.isEmpty()) continue
+            val f = line.split(SEP)
+            when (line[0]) {
+                // C  key  sourceId  name  groupName  logo  streamUrl  epgId  number  catchupDays
+                //    catchupSource  xtreamStreamId  offline  tvgId  identity
+                'C' -> if (f.size >= 15) {
+                    display += ChannelEntity(
+                        key = f[1], sourceId = f[2].toLongOrNull() ?: 0L,
+                        name = f[3], groupName = f[4], logo = field(f[5]), streamUrl = f[6], epgId = field(f[7]),
+                        number = f[8].toIntOrNull() ?: 0, catchupDays = f[9].toIntOrNull() ?: 0,
+                        catchupSource = field(f[10]), xtreamStreamId = field(f[11])?.toLongOrNull(),
+                        offline = f[12] == "1", tvgId = field(f[13]), identity = field(f[14]),
+                    )
+                }
+                // B  key  title  quality  tags(comma separated)
+                'B' -> if (f.size >= 5) {
+                    badges[f[1]] = CleanName(f[2], field(f[3]), f[4].split(',').filter { it.isNotBlank() })
+                }
+                // R  key  rawName
+                'R' -> if (f.size >= 3) raws[f[1]] = f[2]
             }
         }
-        val raws = HashMap<String, String>()
-        root.optJSONObject("rawNames")?.let { r -> r.keys().forEach { k -> r.optString(k).takeIf { it.isNotBlank() }?.let { raws[k] = it } } }
-        ChannelCatalog(chans.toList(), badges, raws, at = root.optLong("at"))
-    }.getOrNull()
+        return ChannelCatalog(display, badges, raws, at)
+    }
 }
