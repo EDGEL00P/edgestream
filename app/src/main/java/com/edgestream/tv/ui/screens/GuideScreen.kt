@@ -512,7 +512,7 @@ private fun GuideRow(
                                 color = if (f) Edge.Text else if (past) Edge.Faint else Edge.Text,
                                 modifier = Modifier.weight(1f, fill = false),
                             )
-                            if (isNow) Pill("LIVE", Modifier.padding(start = 6.dp), Edge.Live)
+                            if (isNow) com.edgestream.tv.ui.components.LiveBadge(Modifier.padding(start = 6.dp), compact = true)
                         }
                         OneLine(
                             p.subtitle?.takeIf { it.isNotBlank() } ?: p.category?.takeIf { it.isNotBlank() } ?: Format.range(p.start, p.stop, use24h),

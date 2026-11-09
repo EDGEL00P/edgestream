@@ -277,16 +277,13 @@ private fun DayAgenda(
                         shape = RoundedCornerShape(12.dp), color = Edge.Text.copy(alpha = 0.04f), focusScale = 1.02f, glow = false,
                     ) {
                         Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                when (g.state) {
-                                    com.edgestream.tv.data.Sports.State.LIVE -> "LIVE"
-                                    com.edgestream.tv.data.Sports.State.FINAL -> "Final"
-                                    else -> com.edgestream.tv.ui.Format.time(g.startMs, use24h)
-                                },
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (g.state == com.edgestream.tv.data.Sports.State.LIVE) Edge.Live else Edge.Dim,
-                                modifier = Modifier.width(76.dp),
-                            )
+                            Box(Modifier.width(76.dp)) {
+                                if (g.state == com.edgestream.tv.data.Sports.State.LIVE) com.edgestream.tv.ui.components.LiveBadge(compact = true)
+                                else Text(
+                                    if (g.state == com.edgestream.tv.data.Sports.State.FINAL) "Final" else com.edgestream.tv.ui.Format.time(g.startMs, use24h),
+                                    style = MaterialTheme.typography.labelLarge, color = Edge.Dim,
+                                )
+                            }
                             com.edgestream.tv.ui.components.TeamLogo(g.away.logo, g.away.name, size = 24.dp)
                             Text(" @ ", style = MaterialTheme.typography.labelMedium, color = Edge.Faint)
                             com.edgestream.tv.ui.components.TeamLogo(g.home.logo, g.home.name, size = 24.dp)

@@ -239,8 +239,9 @@ private fun Spotlight(item: BandItem?, tile: Tile, use24h: Boolean, modifier: Mo
             t.meta?.let { Text(it, color = Dim, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             if (t.chips.isNotEmpty()) Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 t.chips.forEach { c ->
-                    Text(c, color = if (c == "LIVE") Edge.OnAccent else Edge.Text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clip(RoundedCornerShape(50)).background(if (c == "LIVE") Edge.Live else Edge.Text.copy(alpha = 0.12f))
+                    if (c == "LIVE") com.edgestream.tv.ui.components.LiveBadge(compact = true)
+                    else Text(c, color = Edge.Text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clip(RoundedCornerShape(50)).background(Edge.Text.copy(alpha = 0.12f))
                             .padding(horizontal = 10.dp, vertical = 3.dp))
                 }
             }
@@ -274,7 +275,7 @@ private fun GameSpot(g: Sports.Game, use24h: Boolean, fahrenheit: Boolean, previ
         )))
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (g.state == Sports.State.LIVE) { LivePill(); Spacer(Modifier.width(14.dp)) }
+                if (g.state == Sports.State.LIVE) { com.edgestream.tv.ui.components.LiveBadge(); Spacer(Modifier.width(14.dp)) }
                 Text(
                     "${g.away.name.uppercase()} VS ${g.home.name.uppercase()}",
                     color = Edge.Text, fontSize = 50.sp * big, lineHeight = 54.sp * big, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp,
@@ -322,18 +323,6 @@ private fun GameSpot(g: Sports.Game, use24h: Boolean, fahrenheit: Boolean, previ
             }
             if (tall && latestPlay != null) DriveChart(g, latestPlay, Modifier.fillMaxWidth())
         }
-    }
-}
-
-/** The LIVE badge: theme accent, its dot breathing like a recording light. */
-@Composable
-private fun LivePill() {
-    val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "live")
-    val dot by t.animateFloat(1f, 0.2f, androidx.compose.animation.core.infiniteRepeatable(
-        androidx.compose.animation.core.tween(900), androidx.compose.animation.core.RepeatMode.Reverse), label = "dot")
-    Row(Modifier.clip(RoundedCornerShape(6.dp)).background(Edge.Live).padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(8.dp).alpha(dot).clip(CircleShape).background(Edge.OnAccent))
-        Text("LIVE", color = Edge.OnAccent, fontSize = 15.sp, fontWeight = FontWeight.Black, letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 7.dp))
     }
 }
 

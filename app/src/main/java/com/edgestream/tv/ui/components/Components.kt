@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -541,5 +542,33 @@ fun PosterCard(v: com.edgestream.tv.data.db.VodEntity, modifier: Modifier = Modi
                 if (meta.isNotEmpty()) Text(meta, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
+    }
+}
+
+/**
+ * The one LIVE marker: a theme-accent tag with a white dot breathing like a recording light.
+ * [compact] for list rows; the full size for heroes and the top deck.
+ */
+@Composable
+fun LiveBadge(modifier: Modifier = Modifier, label: String = "LIVE", compact: Boolean = false) {
+    val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "live")
+    val dot by t.animateFloat(
+        1f, 0.2f,
+        androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(900), androidx.compose.animation.core.RepeatMode.Reverse,
+        ),
+        label = "dot",
+    )
+    Row(
+        modifier.clip(RoundedCornerShape(if (compact) 4.dp else 6.dp)).background(Edge.Live)
+            .padding(horizontal = if (compact) 7.dp else 10.dp, vertical = if (compact) 3.dp else 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(if (compact) 6.dp else 8.dp).graphicsLayer { alpha = dot }.clip(CircleShape).background(Edge.OnAccent))
+        Text(
+            label, color = Edge.OnAccent, fontSize = if (compact) 11.sp else 15.sp, fontWeight = FontWeight.Black,
+            letterSpacing = if (compact) 1.sp else 1.5.sp, maxLines = 1,
+            modifier = Modifier.padding(start = if (compact) 5.dp else 7.dp),
+        )
     }
 }

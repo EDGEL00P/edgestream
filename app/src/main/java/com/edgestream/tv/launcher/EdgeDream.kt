@@ -194,11 +194,7 @@ private fun DreamScreen() {
             // Live scores, top right.
             if (live.isNotEmpty()) {
                 Column(Modifier.align(Alignment.TopEnd), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(8.dp).background(Edge.Live, CircleShape))
-                        Spacer(Modifier.width(8.dp))
-                        Text("LIVE", style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp), color = Edge.Live)
-                    }
+                    com.edgestream.tv.ui.components.LiveBadge(compact = true)
                     live.forEach { g ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(

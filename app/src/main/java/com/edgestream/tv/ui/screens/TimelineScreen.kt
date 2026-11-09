@@ -485,18 +485,8 @@ private fun SportHero(
             }
             Column(Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Pill(
-                        when {
-                            live -> "LIVE NOW"
-                            final -> "RESULT"
-                            else -> "UP NEXT"
-                        },
-                        color = when {
-                            live -> Edge.Live
-                            final -> Edge.Faint
-                            else -> Edge.Accent
-                        },
-                    )
+                    if (live) com.edgestream.tv.ui.components.LiveBadge(label = "LIVE NOW", compact = true)
+                    else Pill(if (final) "RESULT" else "UP NEXT", color = if (final) Edge.Faint else Edge.Accent)
                     Spacer(Modifier.width(10.dp))
                     Text(
                         "${game.league.name}  ·  ${game.venue ?: "Venue TBC"}",
@@ -666,14 +656,11 @@ private fun SportGameRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.width(96.dp)) {
-                Text(
-                    when {
-                        live -> "LIVE"
-                        final -> "FINAL"
-                        else -> Format.time(game.startMs, use24h)
-                    },
+                if (live) com.edgestream.tv.ui.components.LiveBadge(compact = true)
+                else Text(
+                    if (final) "FINAL" else Format.time(game.startMs, use24h),
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                    color = if (live) Edge.Live else if (final) Edge.Faint else Edge.Text,
+                    color = if (final) Edge.Faint else Edge.Text,
                     maxLines = 1,
                 )
                 Text(

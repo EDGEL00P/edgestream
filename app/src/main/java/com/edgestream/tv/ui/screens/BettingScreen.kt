@@ -201,7 +201,7 @@ private fun GameSlateRow(g: Sports.Game, use24h: Boolean, selected: Boolean, onF
                 )
             }
             when {
-                live -> Pill("LIVE", color = Edge.Live)
+                live -> com.edgestream.tv.ui.components.LiveBadge(compact = true)
                 g.line != null -> Pill("LINE", color = Edge.Accent)
                 else -> Text(g.league.name, style = MaterialTheme.typography.labelSmall, color = Edge.Faint, maxLines = 1)
             }
