@@ -1,6 +1,8 @@
 package com.edgestream.tv.player
 
+import androidx.media3.common.audio.AudioProcessingPipeline
 import androidx.media3.common.audio.AudioProcessor.AudioFormat
+import com.google.common.collect.ImmutableList
 import java.nio.ByteBuffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -31,6 +33,27 @@ class AudioDelayProcessorTest {
         // End of stream: everything still held flows out (the held 100 ms of audio).
         p.queueEndOfStream()
         assertEquals(192 * 100, available(p))
+    }
+
+    /** Driven the way the sink drives it: the pipeline asks isEnded() before every queueInput. */
+    @Test fun audioFlowsThroughTheRealPipeline() {
+        val p = AudioDelayProcessor().apply { delayMs = 100 }
+        val pipeline = AudioProcessingPipeline(ImmutableList.of(p))
+        pipeline.configure(format)
+        pipeline.flush()
+        var out = 0
+        repeat(15) { // 150 ms in 10 ms chunks
+            val chunk = frame(192 * 10)
+            pipeline.queueInput(chunk)
+            assertFalse("pipeline must consume the input", chunk.hasRemaining())
+            out += pipeline.output.remaining().also { pipeline.output.position(pipeline.output.limit()) }
+        }
+        assertEquals(192 * 50, out)
+        assertFalse(pipeline.isEnded)
+        pipeline.queueEndOfStream()
+        out += pipeline.output.remaining().also { pipeline.output.position(pipeline.output.limit()) }
+        assertEquals(192 * 150, out)
+        assertTrue(pipeline.isEnded)
     }
 
     @Test fun zeroDelayIsActiveNothing() {

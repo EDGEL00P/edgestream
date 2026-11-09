@@ -18,6 +18,7 @@ class AudioDelayProcessor : AudioProcessor {
     private var targetBytes = 0
     private var received = 0L
     private var emitted = 0L
+    private var inputEnded = false
     private val held = ArrayDeque<ByteBuffer>()
     /** Bytes ready for the sink (read mode, position..limit). */
     private var output: ByteBuffer = EMPTY
@@ -41,6 +42,7 @@ class AudioDelayProcessor : AudioProcessor {
     }
 
     override fun queueEndOfStream() {
+        inputEnded = true
         drain(all = true)
     }
 
@@ -70,11 +72,13 @@ class AudioDelayProcessor : AudioProcessor {
 
     override fun getOutput(): ByteBuffer = output
 
-    override fun isEnded() = !output.hasRemaining() && held.isEmpty()
+    // Only after end of stream: the pipeline skips a processor that reports ended and never
+    // feeds it input, so "nothing held yet" must not read as ended.
+    override fun isEnded() = inputEnded && !output.hasRemaining() && held.isEmpty()
 
     override fun flush() {
         // A discontinuity (seek, new stream): drop held audio so stale sound never plays.
-        held.clear(); received = 0; emitted = 0; output = EMPTY; buffer = ByteBuffer.allocate(4096)
+        held.clear(); received = 0; emitted = 0; output = EMPTY; buffer = ByteBuffer.allocate(4096); inputEnded = false
     }
 
     override fun reset() {
