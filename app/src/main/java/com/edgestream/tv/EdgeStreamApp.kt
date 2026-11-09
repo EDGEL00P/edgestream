@@ -37,6 +37,8 @@ class EdgeStreamApp : Application(), SingletonImageLoader.Factory {
         com.edgestream.tv.data.SearchKit.init(this)
         PressMode.init(this)
         com.edgestream.tv.data.ChannelIdentities.init(this, appScope)
+        // Warm start: the saved lineup parses while the first screen is still being created.
+        com.edgestream.tv.ui.LineupSnapshot.init(this, appScope)
         repository = Repository(EdgeDatabase.create(this), settings, cacheDir, EpgMap.load(this))
         player = PlayerEngine(this, settings)
         // Warm the Sports hub from its last snapshot before the user opens it.

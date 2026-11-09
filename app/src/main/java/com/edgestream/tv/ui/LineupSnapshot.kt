@@ -4,6 +4,7 @@ import android.content.Context
 import com.edgestream.tv.data.CleanName
 import com.edgestream.tv.data.db.ChannelEntity
 import java.io.File
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -16,6 +17,16 @@ internal object LineupSnapshot {
     private const val FILE = "lineup-snapshot.json"
     /** A snapshot older than this is ignored: the provider's list has surely moved on. */
     private const val MAX_AGE_MS = 14L * 24 * 60 * 60 * 1000
+
+    private val shared = kotlinx.coroutines.CompletableDeferred<ChannelCatalog?>()
+
+    /** Started from Application.onCreate so the parse overlaps Activity creation, not after it. */
+    fun init(context: Context, scope: kotlinx.coroutines.CoroutineScope) {
+        if (shared.isCompleted) return
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) { shared.complete(load(context)) }
+    }
+
+    suspend fun await(): ChannelCatalog? = shared.await()
 
     fun file(context: Context): File = File(context.filesDir, FILE)
 

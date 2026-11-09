@@ -328,11 +328,9 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
     private val shownReminders = HashSet<String>()
 
     init {
-        // Warm start: read the saved lineup off the main thread; it publishes through warmCatalog
-        // the moment it is available (before the DB even finishes its first read).
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            warmCatalog.value = LineupSnapshot.load(app)
-        }
+        // Warm start: the snapshot parse began in Application.onCreate; take it the moment the
+        // ViewModel exists and publish it through warmCatalog.
+        viewModelScope.launch { warmCatalog.value = LineupSnapshot.await() }
     }
 
     init {
