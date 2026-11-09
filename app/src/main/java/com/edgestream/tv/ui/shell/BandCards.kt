@@ -55,6 +55,7 @@ import com.edgestream.tv.ui.components.Sheen
 import com.edgestream.tv.ui.components.TeamLogo
 import com.edgestream.tv.ui.components.WeatherGlyph
 import com.edgestream.tv.ui.glass.SECONDARY_TEXT_ALPHA
+import com.edgestream.tv.ui.input.cardOkSynonyms
 import com.edgestream.tv.ui.input.hoverFocus
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -84,6 +85,7 @@ fun BandCard(
     val interaction = remember { MutableInteractionSource() }
     Box(
         modifier
+            .cardOkSynonyms(onClick)
             .width(width).height(CARD_HEIGHT)
             .depth({ lift }, CardShape)
             // Real frosted glass (the blurred background behind each card), never a see-through tint.

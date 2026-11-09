@@ -63,6 +63,31 @@ fun Modifier.remoteClickable(onClick: () -> Unit): Modifier = this
     .pointerInput(onClick) { detectTapGestures(onTap = { onClick() }) }
 
 /**
+ * The OK keys Compose's own clickable listens for. Everything else [RemoteKeys] calls OK still
+ * has to be routed to cards by [cardOkSynonyms] or the press is lost.
+ */
+private val ComposeOkKeys = setOf(
+    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
+    KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_SPACE,
+)
+
+/** True for an OK synonym that would otherwise never reach a card's clickable. */
+fun needsCardOkSynonym(keyCode: Int): Boolean =
+    RemoteKeys.actionFor(keyCode) == RemoteAction.OK && keyCode !in ComposeOkKeys
+
+/**
+ * Cards use combinedClickable for pointer input, but it only handles Center/Enter/NumPad
+ * Enter/Space. A gamepad's A key is in our OK table too, so it needs this route. Consuming both
+ * halves of the press stops Compose from seeing a key it would ignore anyway.
+ */
+fun Modifier.cardOkSynonyms(onClick: () -> Unit): Modifier = this
+    .onPreviewKeyEvent { e ->
+        if (!needsCardOkSynonym(e.nativeKeyEvent.keyCode)) return@onPreviewKeyEvent false
+        if (e.type == KeyEventType.KeyUp) onClick()
+        true
+    }
+
+/**
  * Air-mouse / pointer support: hovering a focusable moves focus to it, so a click (which the
  * focusable's own clickable handles) acts on what the highlight shows. Put before `focusable()`.
  */

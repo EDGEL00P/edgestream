@@ -2,7 +2,9 @@ package com.edgestream.tv.ui.input
 
 import android.view.KeyEvent
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RemoteKeysTest {
@@ -49,6 +51,18 @@ class RemoteKeysTest {
             assertEquals(d, RemoteKeys.digitFor(KeyEvent.KEYCODE_NUMPAD_0 + d))
         }
         assertNull(RemoteKeys.digitFor(KeyEvent.KEYCODE_ENTER))
+    }
+
+    @Test fun everyOkSynonymPressesACard() {
+        val ok = listOf(
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER,
+            KeyEvent.KEYCODE_SPACE, KeyEvent.KEYCODE_BUTTON_A,
+        )
+        for (code in ok) assertEquals(RemoteAction.OK, RemoteKeys.actionFor(code))
+        // Compose's clickable owns the first four; the gamepad key is the one our card handler owns.
+        for (code in ok.dropLast(1)) assertFalse(needsCardOkSynonym(code))
+        assertTrue(needsCardOkSynonym(KeyEvent.KEYCODE_BUTTON_A))
+        assertFalse(needsCardOkSynonym(KeyEvent.KEYCODE_DPAD_UP))
     }
 
     @Test fun unknownIsNull() = assertNull(RemoteKeys.actionFor(KeyEvent.KEYCODE_VOLUME_UP))

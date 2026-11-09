@@ -22,6 +22,12 @@ class BandCardPressTest {
         }
     }
 
+    @Test fun bothCardPrimitivesRouteEveryOkSynonym() {
+        for (path in listOf("ui/shell/BandCards.kt", "ui/components/Components.kt")) {
+            assertTrue("$path: card misses cardOkSynonyms", source(path).contains(".cardOkSynonyms"))
+        }
+    }
+
     @Test fun everyBandItemKindHasAnOkAction() {
         val kinds = Regex("""data class (\w+)\([^)]*\) : BandItem""")
             .findAll(source("ui/shell/BandRows.kt")).map { it.groupValues[1] }.toList()

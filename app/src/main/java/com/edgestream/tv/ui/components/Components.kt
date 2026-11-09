@@ -74,6 +74,7 @@ import com.edgestream.tv.ui.Edge
 import com.edgestream.tv.ui.Motion
 import com.edgestream.tv.ui.FocusMemory
 import com.edgestream.tv.ui.UiSounds
+import com.edgestream.tv.ui.input.cardOkSynonyms
 import com.edgestream.tv.ui.glass
 import kotlinx.coroutines.delay
 
@@ -157,6 +158,7 @@ fun FocusSurface(
     }
     Box(
         modifier
+            .cardOkSynonyms { UiSounds.click(); onClick() }
             .then(if (memoryKey != null) Modifier.focusRequester(memFocus) else Modifier)
             // The focused card draws over its neighbours so its scaled edge is never cut off.
             .zIndex(if (focused) 1f else 0f)
