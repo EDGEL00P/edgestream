@@ -234,7 +234,20 @@ fun ShellScreen(
         } else if (rest != null) {
             // Home has no page around it, so it takes the page padding the safe area assumes (TvFrame).
             Column(Modifier.fillMaxSize().padding(horizontal = com.edgestream.tv.ui.PAGE_PAD_X_DP.dp, vertical = com.edgestream.tv.ui.PAGE_PAD_Y_DP.dp)) {
-                AmbientTop(vm, spotlight, tile, if (rest.inBand) emptyList() else deck, Modifier.fillMaxWidth().weight(1f).padding(bottom = GAP).graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen })
+                val context = androidx.compose.ui.platform.LocalContext.current
+                AmbientTop(vm, spotlight, tile, if (rest.inBand) emptyList() else deck, onOpen = { card ->
+                    when (card) {
+                        // A live game previewing behind Home goes full screen; otherwise Sports opens.
+                        is BandItem.Game -> vm.preview.value?.let { ch -> vm.playChannel(ch, vm.zapListFor(ch)) } ?: onEvent(ShellEvent.Open(Tile.SPORTS))
+                        is BandItem.Resume -> vm.resume(card.p)
+                        is BandItem.Vod -> vm.openTitle(card.item)
+                        is BandItem.Watch -> vm.openWatchItem(card.item)
+                        is BandItem.Channel -> vm.playChannel(card.channel, card.row)
+                        is BandItem.Event -> onEvent(ShellEvent.Open(Tile.CALENDAR))
+                        is BandItem.App -> runCatching { context.startActivity(card.app.intent) }
+                        is BandItem.Alert, is BandItem.Day, is com.edgestream.tv.data.PublicApis.WeatherDetail -> onEvent(ShellEvent.Open(Tile.WEATHER))
+                    }
+                }, modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = GAP).graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen })
                 val settings by vm.settings.collectAsStateWithLifecycle()
                 // Endless sports ticker: always scores, never headlines, always scrolling.
                 val tickerPages = remember(inputs.games) {

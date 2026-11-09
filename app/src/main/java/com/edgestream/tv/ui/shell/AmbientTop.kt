@@ -46,6 +46,11 @@ import coil3.compose.AsyncImage
 import com.edgestream.tv.data.PublicApis
 import com.edgestream.tv.data.Sports
 import com.edgestream.tv.ui.input.remoteClickable
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import com.edgestream.tv.ui.components.Sheen
+import com.edgestream.tv.ui.components.depth
 import com.edgestream.tv.ui.AppViewModel
 import com.edgestream.tv.ui.Edge
 import com.edgestream.tv.ui.Format
@@ -68,7 +73,11 @@ private val Dim get() = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA)
  * focused card rather than repeating the band.
  */
 @Composable
-fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, deck: List<BandItem> = emptyList(), modifier: Modifier = Modifier) {
+fun AmbientTop(
+    vm: AppViewModel, spotlight: BandItem?, tile: Tile, deck: List<BandItem> = emptyList(), modifier: Modifier = Modifier,
+    /** OK on the hero: what to do with the card it shows. */
+    onOpen: (Any) -> Unit = {},
+) {
     val clock by vm.clock.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val weather by vm.weatherDetail.collectAsStateWithLifecycle()
@@ -89,11 +98,29 @@ fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, deck: List<Ba
         val forecast = weather?.takeIf { settings.showWeather && it.daily.size >= 2 }
         val cards: List<Any> = if (deck.isEmpty()) listOfNotNull(spotlight) else deck + listOfNotNull(forecast)
         var index by remember(cards.size, deck.isEmpty()) { androidx.compose.runtime.mutableIntStateOf(0) }
-        LaunchedEffect(cards.size, deck.isEmpty()) {
-            if (cards.size > 1) while (true) { kotlinx.coroutines.delay(HERO_TURN_MS); index = (index + 1) % cards.size }
+        var heroFocused by remember { mutableStateOf(false) }
+        // Turns by itself at rest; holds still while the remote is on it.
+        LaunchedEffect(cards.size, deck.isEmpty(), heroFocused) {
+            if (cards.size > 1 && !heroFocused) while (true) { kotlinx.coroutines.delay(HERO_TURN_MS); index = (index + 1) % cards.size }
         }
         val card = cards.getOrNull(index) ?: spotlight
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        val lift by com.edgestream.tv.ui.components.rememberLift(heroFocused)
+        Box(
+            Modifier.weight(1f).fillMaxWidth()
+                .depth({ lift }, RoundedCornerShape(20.dp), scale = 1.015f, tilt = 3f)
+                .then(if (heroFocused) Modifier.border(2.dp, Edge.Text.copy(alpha = 0.85f), RoundedCornerShape(20.dp)) else Modifier)
+                .onFocusChanged { heroFocused = it.isFocused }
+                // Left/Right step through the cards; OK opens the one showing.
+                .onKeyEvent { e ->
+                    if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyDown || cards.size < 2) return@onKeyEvent false
+                    when (e.key) {
+                        androidx.compose.ui.input.key.Key.DirectionLeft -> { index = (index - 1 + cards.size) % cards.size; true }
+                        androidx.compose.ui.input.key.Key.DirectionRight -> { index = (index + 1) % cards.size; true }
+                        else -> false
+                    }
+                }
+                .remoteClickable { card?.let(onOpen) },
+        ) {
             androidx.compose.animation.Crossfade(card, label = "hero") { c ->
                 when (c) {
                     is BandItem.Game -> GameSpot(c.game, settings.use24h, settings.fahrenheit, preview?.name, Modifier.fillMaxSize())
@@ -105,6 +132,7 @@ fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, deck: List<Ba
                     else -> Spotlight(c as BandItem, tile, settings.use24h, Modifier.fillMaxSize())
                 }
             }
+            Sheen(heroFocused)
         }
         if (cards.size > 1) Row(Modifier.padding(start = 8.dp, top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             cards.indices.forEach { i ->
