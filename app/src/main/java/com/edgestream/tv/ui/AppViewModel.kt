@@ -28,11 +28,14 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -62,10 +65,12 @@ enum class Screen(val label: String, val icon: androidx.compose.ui.graphics.vect
 }
 
 /** Everything derived from the provider's channel list: display names, badges and raw names. */
-private data class ChannelCatalog(
+internal data class ChannelCatalog(
     val display: List<com.edgestream.tv.data.db.ChannelEntity>,
     val badges: Map<String, com.edgestream.tv.data.CleanName>,
     val rawNames: Map<String, String>,
+    /** When a snapshot was taken (0 for the live pipeline's own catalogs). */
+    val at: Long = 0,
 )
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
@@ -79,8 +84,8 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
     val status = repo.status
 
     val sources: StateFlow<List<SourceEntity>?> = repo.sources.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-    /** Display-ready channels (names cleaned) plus quality/tags and the original provider names. */
-    private val cleaned: StateFlow<ChannelCatalog> =
+    /** Everything derived from the provider's channel list: display names, badges and raw names. */
+    private val pipeline: kotlinx.coroutines.flow.Flow<ChannelCatalog> =
         combine(
             repo.channels,
             settings.map { Triple(it.cleanNames, it.nameRegex, it.englishOnly) }.distinctUntilChanged(),
@@ -128,9 +133,38 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
                 display = deduped,
                 badges = if (!on) emptyMap() else cleanInfos.filterKeys { it in kept },
                 rawNames = deduped.associate { it.key to (rawByKey[it.key] ?: it.name) },
+                at = System.currentTimeMillis(),
             )
         }.flowOn(kotlinx.coroutines.Dispatchers.Default)
-            .stateIn(viewModelScope, SharingStarted.Eagerly, ChannelCatalog(emptyList(), emptyMap(), emptyMap()))
+
+    // Warm start: the saved lineup shows the moment the app opens; the real pipeline replaces it
+    // when it lands. After that the warm value can never come back (liveArrived gate).
+    private val liveArrived = MutableStateFlow(false)
+    private val warmCatalog = MutableStateFlow<ChannelCatalog?>(null)
+    private var snapshotSave: kotlinx.coroutines.Job? = null
+
+    private val cleaned: StateFlow<ChannelCatalog> = kotlinx.coroutines.flow.merge(
+        warmCatalog.filterNotNull().filter { !liveArrived.value }.take(1).onEach {
+            if (com.edgestream.tv.data.Sports.traceOn) android.util.Log.d(
+                "EdgeStartup", "lineup: warm snapshot ${it.display.size} channels at ${android.os.SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime()} ms",
+            )
+        },
+        pipeline.onEach { live ->
+            val first = !liveArrived.value
+            liveArrived.value = true
+            if (com.edgestream.tv.data.Sports.traceOn && first) android.util.Log.d(
+                "EdgeStartup", "lineup: live lineup ${live.display.size} channels at ${android.os.SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime()} ms",
+            )
+            // Persist the finished lineup (debounced: favourite toggles must not hammer the disk).
+            if (live.display.isNotEmpty()) {
+                snapshotSave?.cancel()
+                snapshotSave = viewModelScope.launch {
+                    kotlinx.coroutines.delay(3_000)
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { LineupSnapshot.save(app, live) }
+                }
+            }
+        },
+    ).stateIn(viewModelScope, SharingStarted.Eagerly, ChannelCatalog(emptyList(), emptyMap(), emptyMap()))
 
     val channels: StateFlow<List<ChannelEntity>> = cleaned.map { it.display }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -292,6 +326,14 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
     /** A one-line confirmation ("Reminder set…") shown briefly at the bottom of the screen. */
     val notice = MutableStateFlow<String?>(null)
     private val shownReminders = HashSet<String>()
+
+    init {
+        // Warm start: read the saved lineup off the main thread; it publishes through warmCatalog
+        // the moment it is available (before the DB even finishes its first read).
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            warmCatalog.value = LineupSnapshot.load(app)
+        }
+    }
 
     init {
         viewModelScope.launch {
