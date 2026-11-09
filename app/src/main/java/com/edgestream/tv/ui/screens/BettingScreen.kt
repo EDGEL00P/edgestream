@@ -90,7 +90,14 @@ fun BettingScreen(vm: AppViewModel) {
     val sportsGames = when (marketMode) {
         "live" -> live
         "next" -> upcoming
-        else -> live + upcoming.take(12)
+        else -> if (marketMode.startsWith(LEAGUE_MODE)) (live + upcoming).filter { it.league.id == marketMode.removePrefix(LEAGUE_MODE) }
+        else live + upcoming.take(12)
+    }
+    // Every league on the board gets its own market; NFL already has one in its Picks view.
+    val leagues = (live + upcoming).map { it.league }.distinctBy { it.id }.filter { it.id != "nfl" }
+    // A league's last game ended: its chip is gone, so don't leave the board on an empty market.
+    LaunchedEffect(leagues) {
+        if (marketMode.startsWith(LEAGUE_MODE) && leagues.none { LEAGUE_MODE + it.id == marketMode }) marketMode = "all"
     }
     val sortedRaces = races.sortedBy { it.startMs }
     val nflPicks = nfl?.picks.orEmpty()
@@ -103,6 +110,9 @@ fun BettingScreen(vm: AppViewModel) {
                 item(key = "__next") { FilterChipText("Pre-Match", marketMode == "next", onClick = { marketMode = "next" }) }
                 item(key = "__racing") { FilterChipText("Racing", marketMode == "racing", onClick = { marketMode = "racing" }) }
                 item(key = "__nfl") { FilterChipText("NFL", marketMode == "nfl", onClick = { marketMode = "nfl" }) }
+                items(leagues, key = { it.id }) { l ->
+                    FilterChipText(l.name, marketMode == LEAGUE_MODE + l.id, onClick = { marketMode = LEAGUE_MODE + l.id })
+                }
             }
         }
     }
@@ -144,6 +154,9 @@ fun BettingScreen(vm: AppViewModel) {
             onWatch = { ch -> vm.playChannel(ch, vm.zapListFor(ch)); raceSheet = null }, onClose = { raceSheet = null })
     }
 }
+
+/** Market-chip prefix for one league's games ("league:nba"). */
+private const val LEAGUE_MODE = "league:"
 
 /** Sports markets in NFL Picks style: slate left, matchup detail right. */
 @Composable
