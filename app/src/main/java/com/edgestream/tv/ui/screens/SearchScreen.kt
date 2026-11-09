@@ -93,6 +93,9 @@ private data class Results(
 fun SearchScreen(vm: AppViewModel) {
     val query by vm.searchQuery.collectAsStateWithLifecycle()
     var results by remember { mutableStateOf(Results()) }
+    // True from the first keystroke until the universal catalogue has answered: "no matches"
+    // must never appear while results are still on their way.
+    var searching by remember { mutableStateOf(false) }
     val settings by vm.settings.collectAsStateWithLifecycle()
     val clock by vm.clock.collectAsStateWithLifecycle()
     val allChannels by vm.channels.collectAsStateWithLifecycle()
@@ -125,7 +128,8 @@ fun SearchScreen(vm: AppViewModel) {
 
     LaunchedEffect(query) {
         val q = query.trim()
-        if (q.length < 2) { results = Results(); return@LaunchedEffect }
+        if (q.length < 2) { results = Results(); searching = false; return@LaunchedEffect }
+        searching = true
         delay(300)
         val byEpg = allChannels.filter { it.epgId != null }.groupBy { it.epgId.orEmpty() }
         val local = Results(
@@ -144,6 +148,7 @@ fun SearchScreen(vm: AppViewModel) {
             m.await() to s.await()
         }
         results = local.copy(anywhereMovies = items(movies.first), anywhereShows = items(movies.second))
+        searching = false
     }
 
     Column(Modifier.fillMaxSize().padding(start = 16.dp, top = 28.dp, end = 42.dp, bottom = 36.dp)) {
@@ -182,6 +187,14 @@ fun SearchScreen(vm: AppViewModel) {
         }
         val empty = answers.isEmpty() && results.channels.isEmpty() && results.programmes.isEmpty() && results.vod.isEmpty() &&
             results.anywhereMovies.isEmpty() && results.anywhereShows.isEmpty()
+        if (empty && searching && query.trim().length >= 2) {
+            // Still looking (the universal catalogue answers after the provider's own rows).
+            Row(Modifier.padding(top = 26.dp), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), color = Edge.Accent, strokeWidth = 3.dp)
+                Text("  Searching everywhere for “${query.trim()}”…", style = MaterialTheme.typography.titleMedium, color = Edge.Dim)
+            }
+            return@Column
+        }
         if (empty) {
             EmptyState(
                 if (query.trim().length < 2) "Find anything" else "No matches for “${query.trim()}”",
@@ -253,7 +266,10 @@ fun SearchScreen(vm: AppViewModel) {
                 item(key = title) {
                     com.edgestream.tv.ui.components.Shelf("$title · ${list.size}") {
                         items(list, key = { it.id }) { t ->
-                            com.edgestream.tv.ui.components.TitleTile(listOfNotNull(t.title, t.year).joinToString(" · "), t.poster) { vm.openUniversal(t, movies) }
+                            com.edgestream.tv.ui.components.TitleTile(
+                                t.title, t.poster,
+                                meta = listOfNotNull(t.year, t.rating?.let { "★ $it" }).joinToString("  ·  ").ifBlank { null },
+                            ) { vm.openUniversal(t, movies) }
                         }
                     }
                 }

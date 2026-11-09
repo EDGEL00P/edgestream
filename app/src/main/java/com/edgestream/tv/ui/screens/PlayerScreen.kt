@@ -718,9 +718,15 @@ private fun NowInfo(
             if (sportsGame != null && np.catchup == null) ScoreBug(sportsGame)
         }
         is NowPlaying.Vod -> {
-            // Title large, the episode under it, then one quiet line of facts (no thumbnail).
+            // Title-card continuity: the same display face the On Demand hero used.
             val title = com.edgestream.tv.data.NameCleaner.tidyTitle(np.title)
-            OneLine(title.substringBefore(" · "), style = MaterialTheme.typography.displaySmall, color = Edge.Text)
+            OneLine(
+                title.substringBefore(" · "),
+                style = MaterialTheme.typography.displaySmall.copy(
+                    fontFamily = com.edgestream.tv.ui.glass.ClockFont, fontSize = 44.sp, letterSpacing = 0.5.sp,
+                ),
+                color = Edge.Text,
+            )
             val episodeNo = title.substringAfter(" · ", "").takeIf { it.isNotBlank() }
                 ?.replace(Regex("""S(\d+)E(\d+)"""), "Season $1 · Episode $2")
             val episodeLine = listOfNotNull(episodeNo, np.subtitle).joinToString("  ·  ")
@@ -956,10 +962,15 @@ private fun CtrlButton(
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(96.dp)) {
         FocusSurface(
             onClick = onClick, modifier = modifier.size(size).onFocusChanged { focused = it.isFocused },
-            shape = CircleShape, color = Edge.Text.copy(alpha = if (primary) 0.22f else 0.12f),
-            focusedColor = Edge.Text, focusScale = 1.08f, glow = false,
+            shape = CircleShape,
+            // The transport's centre: accent-filled like every commercial player's play button.
+            color = if (primary) Edge.Accent else Edge.Text.copy(alpha = 0.12f),
+            focusedColor = if (primary) Edge.Accent else Edge.Text, focusScale = 1.08f, glow = false,
         ) { f ->
-            androidx.compose.material3.Icon(icon, label, Modifier.align(Alignment.Center).size(if (primary) 36.dp else 26.dp), tint = if (f) Edge.Bg else Edge.Text)
+            androidx.compose.material3.Icon(
+                icon, label, Modifier.align(Alignment.Center).size(if (primary) 36.dp else 26.dp),
+                tint = if (primary) Edge.OnAccent else if (f) Edge.Bg else Edge.Text,
+            )
         }
         Text(
             label, style = MaterialTheme.typography.labelMedium, color = Edge.Text, maxLines = 1, overflow = TextOverflow.Ellipsis,
