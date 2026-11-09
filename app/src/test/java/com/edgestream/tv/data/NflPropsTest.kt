@@ -10,6 +10,17 @@ import java.io.File
 import java.nio.file.Files
 
 class NflPropsTest {
+    /** The Action's slim files (tools/sports/build_nfl.py) must keep every column read here. */
+    @Test fun slimBuilderKeepsEveryColumnPropsRead() {
+        val script = File("../tools/sports/build_nfl.py").readText()
+        fun list(name: String) = Regex(name + """ = \[([^\]]*)]""").find(script)!!.groupValues[1]
+            .let { Regex(""""([a-z_]+)"""").findAll(it).map { m -> m.groupValues[1] }.toSet() }
+        val stats = list("STAT_COLS")
+        Market.entries.forEach { assertTrue("${it.column} missing from STAT_COLS", it.column in stats) }
+        listOf("player_id", "season", "week", "team", "game_id").forEach { assertTrue("$it missing", it in stats) }
+        assertEquals(setOf("espn_id", "gsis_id", "display_name", "position", "latest_team"), list("PLAYER_COLS"))
+    }
+
     private val players = "gsis_id,display_name,position,espn_id\n00-1,Ace Receiver,WR,111\n00-2,Back Up,WR,222.0\n"
     private fun stats(vararg rows: String) =
         "player_id,season,week,game_id,passing_yards,rushing_yards,receiving_yards,receptions\n" + rows.joinToString("\n")

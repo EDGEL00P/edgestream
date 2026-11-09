@@ -19,8 +19,10 @@ import kotlin.math.sqrt
  */
 object NflProps {
     private const val NFLVERSE = "https://github.com/nflverse/nflverse-data/releases/download"
-    private const val PLAYERS_URL = "$NFLVERSE/players/players.csv"
-    private fun statsUrl(season: Int) = "$NFLVERSE/stats_player/stats_player_week_$season.csv"
+    /** The same files cut to the columns read here (tools/sports/build_nfl.py, rebuilt every 6 h). */
+    private const val SLIM = "https://github.com/EDGEL00P/edgestream/releases/download/sports"
+    private val PLAYERS_URLS = listOf("$SLIM/nfl-players.csv", "$NFLVERSE/players/players.csv")
+    private fun statsUrls(season: Int) = listOf("$SLIM/nfl-stats-$season.csv", "$NFLVERSE/stats_player/stats_player_week_$season.csv")
     private const val LOG_FILE = "nfl-props.json"
     private const val HOUR = 3_600_000L
 
@@ -82,23 +84,26 @@ object NflProps {
     // ---- loading ------------------------------------------------------------------------------
 
     suspend fun loadBook(dir: File, season: Int, now: Long = System.currentTimeMillis()): Book? = withContext(Dispatchers.IO) {
-        val players = cached(dir, "nflverse-players.csv", PLAYERS_URL, 24 * HOUR, now) ?: return@withContext null
-        val current = cached(dir, "nflverse-stats-$season.csv", statsUrl(season), 6 * HOUR, now)
-        val last = cached(dir, "nflverse-stats-${season - 1}.csv", statsUrl(season - 1), 24 * HOUR, now)
+        val players = cached(dir, "nflverse-players.csv", PLAYERS_URLS, 24 * HOUR, now) ?: return@withContext null
+        val current = cached(dir, "nflverse-stats-$season.csv", statsUrls(season), 6 * HOUR, now)
+        val last = cached(dir, "nflverse-stats-${season - 1}.csv", statsUrls(season - 1), 24 * HOUR, now)
         withContext(NflPicks.background) { buildBook(players, listOfNotNull(last, current)) }
     }
 
-    private suspend fun cached(dir: File, name: String, url: String, staleMs: Long, now: Long): String? {
+    /** The first of [urls] that answers wins; the cache covers all of them failing. */
+    private suspend fun cached(dir: File, name: String, urls: List<String>, staleMs: Long, now: Long): String? {
         val file = File(dir, name)
         if (file.isFile && now - file.lastModified() < staleMs) return file.readText()
-        val fresh = try {
-            Http.openSuspend(url) { it.readBytes().decodeToString() }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            null
+        val fresh = urls.firstNotNullOfOrNull { url ->
+            try {
+                Http.openSuspend(url) { it.readBytes().decodeToString() }.takeIf { it.length > 100 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
         }
-        if (fresh != null && fresh.length > 100) {
+        if (fresh != null) {
             NflPicks.writeAtomic(file, fresh)
             return fresh
         }

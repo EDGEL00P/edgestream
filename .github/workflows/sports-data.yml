@@ -1,0 +1,38 @@
+# Sports data the TV would otherwise download and parse itself. Every 6 hours: cut nflverse's
+# player files (~20 MB) to the columns NFL props read (~1.4 MB) and publish them as "sports"
+# release assets. The app falls back to nflverse directly when an asset is missing.
+name: Sports data
+
+on:
+  schedule:
+    - cron: "41 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sports-data
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build the slim NFL files
+        run: python tools/sports/build_nfl.py sports-out
+
+      - name: Publish them as sports release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view sports >/dev/null 2>&1 || gh release create sports --title "Sports data" \
+            --notes "Rebuilt every 6 hours from public sports data (nflverse, CC-BY 4.0). Downloaded by the app; not a software release." --latest=false
+          gh release upload sports sports-out/*.csv --clobber
