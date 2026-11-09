@@ -8,6 +8,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -19,12 +21,20 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.edgestream.tv.ui.Edge
 
-/** One team-logo treatment: real artwork when ESPN supplies it, a consistent initial otherwise. */
+/**
+ * One team-logo treatment: real artwork when ESPN supplies it, a consistent initial otherwise.
+ * [onDark] asks for ESPN's dark-background artwork (falling back to the standard logo).
+ */
 @Composable
-fun TeamLogo(url: String?, name: String, modifier: Modifier = Modifier, size: Dp = 22.dp) {
+fun TeamLogo(url: String?, name: String, modifier: Modifier = Modifier, size: Dp = 22.dp, onDark: Boolean = false) {
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
         if (!url.isNullOrBlank()) {
-            AsyncImage(url, name, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+            val dark = if (onDark) darkLogo(url) else null
+            var src by androidx.compose.runtime.remember(url, onDark) { androidx.compose.runtime.mutableStateOf(dark ?: url) }
+            AsyncImage(
+                src, name, Modifier.fillMaxSize(), contentScale = ContentScale.Fit,
+                onError = { if (src != url) src = url },
+            )
         } else {
             Box(
                 Modifier.fillMaxSize().clip(CircleShape).background(Edge.PanelHi),
@@ -42,3 +52,7 @@ fun TeamLogo(url: String?, name: String, modifier: Modifier = Modifier, size: Dp
         }
     }
 }
+
+/** ESPN's dark-background version of a team logo URL, or null when the URL isn't one of ESPN's. */
+internal fun darkLogo(url: String): String? =
+    if ("espncdn.com/i/teamlogos/" in url && "/500/" in url) url.replace("/500/", "/500-dark/") else null

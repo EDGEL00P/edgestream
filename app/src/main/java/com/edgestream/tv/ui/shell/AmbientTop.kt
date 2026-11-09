@@ -27,6 +27,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -305,12 +307,13 @@ private fun GameSpot(g: Sports.Game, use24h: Boolean, fahrenheit: Boolean, previ
     }
 }
 
-private val SCORE_BUG_WIDTH = 760.dp
+private val SCORE_BUG_WIDTH = 800.dp
 
 /**
- * The broadcast-style score bar: each team on its own colour panel (logo, abbreviation, record,
- * score), a round clock medallion between them (game clock and period live, a countdown to the
- * start before it), and the down-and-distance under the side with the ball.
+ * The broadcast score bar, NBA-style: one straight strip in a thin silver frame. Each side has a
+ * logo tile, a big abbreviation and the score in a darker box of the team colour; the black
+ * centre carries the period and clock (a countdown to the start before it). Records sit under
+ * the ends; down and distance under the side with the ball.
  */
 @Composable
 private fun ScoreBug(g: Sports.Game, use24h: Boolean, latestPlay: Sports.Play?, big: Float, modifier: Modifier) {
@@ -318,67 +321,87 @@ private fun ScoreBug(g: Sports.Game, use24h: Boolean, latestPlay: Sports.Play?, 
     val now by androidx.compose.runtime.produceState(System.currentTimeMillis(), g.id, upcoming) {
         while (upcoming) { value = System.currentTimeMillis(); kotlinx.coroutines.delay(1_000) }
     }
-    val medal = 92.dp * big
+    val (awayFill, homeFill) = bugColors(g.away, g.home)
+    val frame = Color(0xFFC9CED6)
     Column(modifier.width(SCORE_BUG_WIDTH * big)) {
-        Box(contentAlignment = Alignment.Center) {
-            Row(Modifier.fillMaxWidth().height(66.dp * big), horizontalArrangement = Arrangement.spacedBy(medal - 16.dp)) {
-                TeamPanel(g.away, if (upcoming) null else g.away.score, big, leading = true, Modifier.weight(1f))
-                TeamPanel(g.home, if (upcoming) null else g.home.score, big, leading = false, Modifier.weight(1f))
-            }
-            Column(
-                Modifier.size(medal).clip(CircleShape).background(Color(0xFF14181F))
-                    .border(3.dp, Edge.Text.copy(alpha = 0.85f), CircleShape),
-                verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
+        Row(
+            Modifier.fillMaxWidth().height(58.dp * big).border(2.dp, frame, RoundedCornerShape(3.dp))
+                .padding(2.dp).clip(RoundedCornerShape(2.dp)),
+        ) {
+            BugSide(g.away, awayFill, if (upcoming) null else g.away.score, big, leading = true, Modifier.weight(1f))
+            Row(
+                Modifier.fillMaxHeight().width(210.dp * big).background(Color(0xFF0E1013)).padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
             ) {
-                val (top, bottom) = when (g.state) {
-                    Sports.State.UPCOMING -> kickoffCountdown(g.startMs - now) to "KICKOFF"
+                val (main, label) = when (g.state) {
+                    Sports.State.UPCOMING -> kickoffCountdown(g.startMs - now) to startWord(g)
                     Sports.State.FINAL -> "FINAL" to ""
-                    Sports.State.LIVE -> clockParts(g.detail)
+                    Sports.State.LIVE -> clockParts(g.detail).let { (clock, period) -> clock to period }
                 }
-                Text(top, color = Color.White, fontSize = (if (top.length > 6) 17 else 24).sp * big, fontWeight = FontWeight.Black, maxLines = 1)
-                if (bottom.isNotEmpty()) Text(bottom, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp * big, fontWeight = FontWeight.Bold, maxLines = 1)
+                if (label.isNotEmpty()) Text(label, color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp * big, fontWeight = FontWeight.Bold, maxLines = 1)
+                if (label.isNotEmpty()) Spacer(Modifier.width(14.dp))
+                Text(main, color = Color.White, fontSize = (if (main.length > 6) 22 else 30).sp * big, fontWeight = FontWeight.Black, maxLines = 1)
             }
+            BugSide(g.home, homeFill, if (upcoming) null else g.home.score, big, leading = false, Modifier.weight(1f))
         }
-        val situation = latestPlay?.downDistance?.takeIf { g.state == Sports.State.LIVE }
-            ?: if (upcoming) "${SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(Date(g.startMs))}  ·  ${Format.time(g.startMs, use24h)}" else null
-        situation?.let {
-            val homeBall = latestPlay?.team != null && latestPlay.team == g.home.abbr
+        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp)) {
+            Text(g.away.record.orEmpty(), color = Edge.Text.copy(alpha = 0.85f), fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            val situation = latestPlay?.downDistance?.takeIf { g.state == Sports.State.LIVE }
+                ?: if (upcoming) "${SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(Date(g.startMs))}  ·  ${Format.time(g.startMs, use24h)}" else null
             Text(
-                it.uppercase(), color = Edge.Text.copy(alpha = 0.85f), fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, maxLines = 1,
-                modifier = Modifier.padding(top = 6.dp)
-                    .align(if (homeBall) Alignment.End else if (upcoming) Alignment.CenterHorizontally else Alignment.Start)
-                    .padding(horizontal = 18.dp),
+                situation?.uppercase().orEmpty(), color = Edge.Text.copy(alpha = 0.85f), fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp, maxLines = 1, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.weight(1f),
             )
+            Text(g.home.record.orEmpty(), color = Edge.Text.copy(alpha = 0.85f), fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         }
     }
 }
 
 @Composable
-private fun TeamPanel(t: Sports.Team, score: String?, big: Float, leading: Boolean, modifier: Modifier) {
-    val c = teamColor(t)
-    val r = 14.dp
-    val shape = if (leading) RoundedCornerShape(topStart = r, bottomStart = r) else RoundedCornerShape(topEnd = r, bottomEnd = r)
-    Row(
-        modifier.fillMaxHeight().clip(shape)
-            .background(androidx.compose.ui.graphics.Brush.horizontalGradient(
-                if (leading) listOf(c.copy(alpha = 0.95f), c.copy(alpha = 0.75f)) else listOf(c.copy(alpha = 0.75f), c.copy(alpha = 0.95f)),
-            ))
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        val logo: @Composable () -> Unit = { TeamLogo(t.logo, t.name, size = 46.dp * big) }
-        val name: @Composable () -> Unit = {
-            Column(horizontalAlignment = if (leading) Alignment.Start else Alignment.End) {
-                Text(t.abbr, color = Color.White, fontSize = 24.sp * big, fontWeight = FontWeight.Black, maxLines = 1)
-                t.record?.let { Text(it, color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp * big, fontWeight = FontWeight.SemiBold, maxLines = 1) }
-            }
+private fun BugSide(t: Sports.Team, fill: Color, score: String?, big: Float, leading: Boolean, modifier: Modifier) {
+    val light = fill.luminance() > 0.55f
+    val ink = if (light) Color(0xFF0E1013) else Color.White
+    val scoreFill = if (light) lerp(fill, Color.Black, 0.12f) else lerp(fill, Color.Black, 0.35f)
+    val tile: @Composable () -> Unit = {
+        Box(Modifier.fillMaxHeight().width(66.dp * big).background(lerp(fill, Color.Black, 0.2f)), contentAlignment = Alignment.Center) {
+            TeamLogo(t.logo, t.name, size = 44.dp * big, onDark = true)
         }
-        val points: @Composable () -> Unit = {
-            Text(score.orEmpty(), color = Color.White, fontSize = 40.sp * big, fontWeight = FontWeight.Black, maxLines = 1)
-        }
-        if (leading) { logo(); Spacer(Modifier.width(12.dp)); name(); Spacer(Modifier.weight(1f)); points() }
-        else { points(); Spacer(Modifier.weight(1f)); name(); Spacer(Modifier.width(12.dp)); logo() }
     }
+    val abbr: @Composable (Modifier) -> Unit = { m ->
+        Box(m.fillMaxHeight().background(fill), contentAlignment = Alignment.Center) {
+            Text(t.abbr, color = ink, fontSize = 34.sp * big, fontWeight = FontWeight.Black, letterSpacing = (-0.5).sp, maxLines = 1)
+        }
+    }
+    val points: @Composable () -> Unit = {
+        Box(Modifier.fillMaxHeight().width(92.dp * big).background(scoreFill), contentAlignment = Alignment.Center) {
+            Text(score.orEmpty(), color = ink, fontSize = 36.sp * big, fontWeight = FontWeight.Black, maxLines = 1)
+        }
+    }
+    Row(modifier.fillMaxHeight()) {
+        if (leading) { tile(); abbr(Modifier.weight(1f)); points() } else { points(); abbr(Modifier.weight(1f)); tile() }
+    }
+}
+
+/** The word under a countdown, by sport. */
+private fun startWord(g: Sports.Game): String = when {
+    "basketball" in g.league.path -> "TIP-OFF"
+    "hockey" in g.league.path -> "PUCK DROP"
+    "baseball" in g.league.path -> "FIRST PITCH"
+    else -> "KICKOFF"
+}
+
+/** Both sides' fills: the home side takes its alternate colour when the two primaries clash. */
+private fun bugColors(away: Sports.Team, home: Sports.Team): Pair<Color, Color> {
+    val a = teamColor(away)
+    val h = teamColor(home)
+    if (colorDistance(a, h) >= 0.25f) return a to h
+    val alt = home.altColor?.takeIf { it.length == 6 }?.let { runCatching { Color(android.graphics.Color.parseColor("#$it")) }.getOrNull() }
+    return a to (alt?.takeIf { colorDistance(a, it) >= 0.25f } ?: Color(0xFFDDE1E6))
+}
+
+private fun colorDistance(x: Color, y: Color): Float {
+    val dr = x.red - y.red; val dg = x.green - y.green; val db = x.blue - y.blue
+    return kotlin.math.sqrt(dr * dr + dg * dg + db * db)
 }
 
 /** "11:13 - 4th" -> ("11:13", "4TH"); a detail without a clock ("Halftime") stays whole. */
