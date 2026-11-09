@@ -28,6 +28,10 @@ class EdgeStreamApp : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        fun t() = android.os.SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime()
+        val trace = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        fun mark(what: String) { if (trace) android.util.Log.d("EdgeStartup", "app: $what at ${t()} ms") }
+        mark("onCreate begin")
         settings = Settings(this)
         com.edgestream.tv.data.RecommendedSetup.applyIfNeeded(settings, getSharedPreferences("edgestream", MODE_PRIVATE))
         com.edgestream.tv.ui.DeviceTier.init(this)
@@ -39,8 +43,14 @@ class EdgeStreamApp : Application(), SingletonImageLoader.Factory {
         com.edgestream.tv.data.ChannelIdentities.init(this, appScope)
         // Warm start: the saved lineup parses while the first screen is still being created.
         com.edgestream.tv.ui.LineupSnapshot.init(this, appScope)
-        repository = Repository(EdgeDatabase.create(this), settings, cacheDir, EpgMap.load(this))
+        mark("pre-database inits done")
+        val db = EdgeDatabase.create(this)
+        mark("database open")
+        val map = EpgMap.load(this)
+        mark("epg map loaded")
+        repository = Repository(db, settings, cacheDir, map)
         player = PlayerEngine(this, settings)
+        mark("repository + player built")
         // Warm the Sports hub from its last snapshot before the user opens it.
         com.edgestream.tv.data.Sports.init(this)
         com.edgestream.tv.data.Sports.traceOn = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
