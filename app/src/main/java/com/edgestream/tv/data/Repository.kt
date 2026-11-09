@@ -27,7 +27,7 @@ import java.util.Calendar
 import java.util.concurrent.TimeUnit
 
 /** A short human-readable line describing what a background refresh is doing. */
-data class SyncStatus(val running: Boolean = false, val message: String = "")
+data class SyncStatus(val running: Boolean = false, val message: String = "", val failed: Boolean = false)
 
 /**
  * How far ahead the guide is kept. The grid asks for 30 h of listings per row and its 12-hour
@@ -231,10 +231,11 @@ class Repository(
         }
     }
 
-    private fun status(message: String?, done: Boolean = false) {
+    private fun status(message: String?, done: Boolean = false, failed: Boolean = done) {
         android.util.Log.i("EdgeStream", message ?: "idle")
-        _status.value = if (message == null) SyncStatus() else SyncStatus(running = !done, message = message)
+        _status.value = if (message == null) SyncStatus() else SyncStatus(running = !done, message = message, failed = failed)
     }
+
 
     /**
      * Swaps in a freshly downloaded lineup without losing guide links: each channel keeps the
@@ -556,7 +557,7 @@ class Repository(
         } finally { pool.shutdown() }
         if (dead.isNotEmpty()) db.channels().setOffline(dead.toList(), true)
         if (alive.isNotEmpty()) db.channels().setOffline(alive.toList(), false)
-        status("${source.name}: ${alive.size} working, ${dead.size} offline", done = true)
+        status("${source.name}: ${alive.size} working, ${dead.size} offline", done = true, failed = false)
         alive.size to dead.size
     }
 

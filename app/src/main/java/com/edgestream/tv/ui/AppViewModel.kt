@@ -74,6 +74,9 @@ internal data class ChannelCatalog(
 )
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
+/** How long a notice stays: long enough to read (about 20 characters a second), 3–7 s. */
+internal fun noticeMs(text: String): Long = (2_000L + text.length * 50L).coerceIn(3_000L, 7_000L)
+
 class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
     private val app = EdgeStreamApp.instance
     val repo = app.repository
@@ -364,10 +367,15 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
     }
 
     private var noticeJob: kotlinx.coroutines.Job? = null
+    private var lastNotice = "" to 0L
     fun showNotice(text: String) {
+        val now = System.currentTimeMillis()
+        // The same notice again within 10 s (a retry, a double press) keeps the one on screen.
+        if (notice.value == text && lastNotice.first == text && now - lastNotice.second < 10_000) return
+        lastNotice = text to now
         noticeJob?.cancel()
         notice.value = text
-        noticeJob = viewModelScope.launch { delay(3_500); notice.value = null }
+        noticeJob = viewModelScope.launch { delay(noticeMs(text)); notice.value = null }
     }
 
     // ---- debrid library ----------------------------------------------------------------------
@@ -569,13 +577,13 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
 
     // ---- extreme weather alerts (real, keyless feeds) ------------------------------------
     val weatherAlert = MutableStateFlow<com.edgestream.tv.data.Trackers.Warning?>(null)
-    private val seenWeatherAlerts = mutableSetOf<String>()
+    private val alertMemory = app.getSharedPreferences("edgestream", android.content.Context.MODE_PRIVATE).let { prefs ->
+        com.edgestream.tv.data.AlertMemory({ prefs.getString("seenAlerts", null) }, { prefs.edit().putString("seenAlerts", it).apply() })
+    }
     fun dismissWeatherAlert() {
-        weatherAlert.value?.let { seenWeatherAlerts += alertKey(it) }
+        weatherAlert.value?.let(alertMemory::dismiss)
         weatherAlert.value = null
     }
-    private fun alertKey(w: com.edgestream.tv.data.Trackers.Warning) =
-        "${w.source}|${w.severity}|${w.title}".take(180)
     private fun isExtreme(w: com.edgestream.tv.data.Trackers.Warning): Boolean {
         val s = "${w.severity} ${w.title} ${w.detail}".lowercase()
         return listOf("extreme", "severe", "tornado", "hurricane", "cyclone", "typhoon",
@@ -590,9 +598,18 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
                     runCatching {
                         val cc = loc.countryCode ?: countryCode
                         val warnings = com.edgestream.tv.data.Trackers.warnings(cc, loc.lat, loc.lon)
-                        val hit = warnings.firstOrNull { isExtreme(it) && alertKey(it) !in seenWeatherAlerts }
+                        val hit = warnings.firstOrNull { isExtreme(it) && !alertMemory.isDismissed(it) }
+                        // Built once, so the check and the dismissal see the same alert.
                         val cyclone = com.edgestream.tv.data.Trackers.cyclones(loc.lat, loc.lon)
-                            .firstOrNull { it.km <= 50 && alertKey(com.edgestream.tv.data.Trackers.Warning(it.name, "", it.alert, "GDACS")) !in seenWeatherAlerts }
+                            .filter { it.km <= 50 }
+                            .map { c ->
+                                com.edgestream.tv.data.Trackers.Warning(
+                                    "Tropical cyclone ${c.name}",
+                                    "${c.alert} · ${c.km} km ${c.bearing} · winds ${c.windKph} km/h",
+                                    "Extreme", "GDACS",
+                                )
+                            }
+                            .firstOrNull { !alertMemory.isDismissed(it) }
                         // Real lightning (Xweather) when keys present — proximity tiers.
                         val strikes = com.edgestream.tv.data.XweatherApi.nearby(
                             loc.lat, loc.lon,
@@ -608,13 +625,9 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
                         val nearestStrike = strikes.firstOrNull()
                         when {
                             hit != null && weatherAlert.value == null -> weatherAlert.value = hit
-                            cyclone != null && weatherAlert.value == null -> weatherAlert.value =
-                                com.edgestream.tv.data.Trackers.Warning(
-                                    "Tropical cyclone ${cyclone.name}",
-                                    "${cyclone.alert} · ${cyclone.km} km ${cyclone.bearing} · winds ${cyclone.windKph} km/h",
-                                    "Extreme", "GDACS",
-                                )
-                            nearestStrike != null && nearestStrike.second <= 25 && weatherAlert.value == null -> {
+                            cyclone != null && weatherAlert.value == null -> weatherAlert.value = cyclone
+                            nearestStrike != null && nearestStrike.second <= 25 && weatherAlert.value == null &&
+                                !alertMemory.isDismissed(com.edgestream.tv.data.Trackers.Warning("", "", "", com.edgestream.tv.data.AlertMemory.LIGHTNING_SOURCE)) -> {
                                 val (s, km) = nearestStrike
                                 val tier = if (km <= 10) "Imminent" else "Close"
                                 val ageS = ((System.currentTimeMillis() - s.timestampMs) / 1000).coerceAtLeast(0)

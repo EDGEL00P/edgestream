@@ -401,11 +401,13 @@ fun EdgeApp(vm: AppViewModel = viewModel()) {
             NoticeToast(vm, Modifier)
             // Never over full-screen video: sync progress waits until you leave the picture.
             if (!fullscreen) SyncToast(vm, Modifier)
+            // Over full-screen video a warning is a banner, not a popup that takes the remote.
+            if (fullscreen) WeatherAlertBanner(vm)
         }
         ReminderPopup(vm)
         AlarmPopup(vm)
         if (choosingProfile && !fullscreen) com.edgestream.tv.ui.screens.WhoIsWatching { profileChosen = true }
-        WeatherAlertPopup(vm)
+        if (!fullscreen) WeatherAlertPopup(vm)
         }
         }
     }
@@ -440,15 +442,29 @@ private fun ChannelPadOsd(vm: AppViewModel, modifier: Modifier) {
 }
 
 @Composable
+private fun WeatherAlertBanner(vm: AppViewModel) {
+    val alert by vm.weatherAlert.collectAsStateWithLifecycle()
+    var last by remember { mutableStateOf<com.edgestream.tv.data.Trackers.Warning?>(null) }
+    alert?.let { last = it }
+    androidx.compose.runtime.LaunchedEffect(alert) {
+        if (alert != null) { kotlinx.coroutines.delay(8_000); vm.dismissWeatherAlert() }
+    }
+    Banner(alert != null, last?.title.orEmpty(), last?.detail.orEmpty())
+}
+
+@Composable
 private fun SyncToast(vm: AppViewModel, modifier: Modifier) {
     val status by vm.status.collectAsStateWithLifecycle()
+    val channels by vm.channels.collectAsStateWithLifecycle()
+    // Routine background refreshes stay silent; only the first load and failures are worth a banner.
+    val worthShowing = status.message.isNotEmpty() && (status.failed || (status.running && channels.isEmpty()))
     var dismissed by remember(status) { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(status) {
         if (!status.running && status.message.isNotEmpty()) { kotlinx.coroutines.delay(6_000); dismissed = true }
     }
     var last by remember { mutableStateOf("") }
     if (status.message.isNotEmpty()) last = status.message
-    Banner(status.message.isNotEmpty() && !dismissed, if (status.running) "Updating" else "Up to date", last, working = status.running, modifier = modifier)
+    Banner(worthShowing && !dismissed, if (status.running) "Updating" else "Update failed", last, working = status.running, modifier = modifier)
 }
 
 /**
@@ -624,7 +640,7 @@ private fun AlarmPopup(vm: AppViewModel) {
     val stop = remember { androidx.compose.ui.focus.FocusRequester() }
     androidx.compose.ui.window.Dialog(onDismissRequest = { vm.dismissAlarm() }) {
         androidx.compose.runtime.LaunchedEffect(a.alarmAt) { kotlinx.coroutines.delay(80); runCatching { stop.requestFocus() } }
-        Column(Modifier.width(560.dp).background(Edge.Solid, EdgeShapes.Panel).padding(28.dp)) {
+        Column(Modifier.width(560.dp).glass(EdgeShapes.Panel, Edge.Solid.copy(alpha = 0.96f)).padding(28.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Alarm, null, Modifier.size(22.dp), tint = Edge.Accent)
                 Text(
