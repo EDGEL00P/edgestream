@@ -265,7 +265,7 @@ fun ShellScreen(
                 }
                 Spacer(Modifier.height(GAP))
                 val other by vm.otherNowPlaying.collectAsStateWithLifecycle()
-                Dock(rest.tile, rest.inBand, dockFocus, onEvent, other, onKey = { dockKeys++ }, Modifier.fillMaxWidth().height(DOCK_HEIGHT).graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen })
+                Dock(rest.tile, rest.inBand, dockFocus, onEvent, other, onKey = { dockKeys++ }, voice = { VoiceButton(vm) }, modifier = Modifier.fillMaxWidth().height(DOCK_HEIGHT).graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen })
                 Spacer(Modifier.height(TICKER_GAP))
                 Ticker(tickerPages, settings.use24h, Modifier.fillMaxWidth().height(TICKER_HEIGHT).graphicsLayer())
             }
@@ -425,6 +425,8 @@ private fun Dock(
     onEvent: (ShellEvent) -> Unit,
     other: com.edgestream.tv.system.OtherNowPlaying?,
     onKey: () -> Unit,
+    /** Voice search, right after Search. */
+    voice: @Composable () -> Unit,
     modifier: Modifier,
 ) {
     Row(
@@ -435,7 +437,10 @@ private fun Dock(
             .padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Tile.entries.filter { it.utility }.forEach { UtilityIcon(it, dockFocus.getValue(it), onEvent) }
+        Tile.entries.filter { it.utility }.forEach {
+            UtilityIcon(it, dockFocus.getValue(it), onEvent)
+            if (it == Tile.SEARCH) voice()
+        }
         Box(Modifier.padding(horizontal = 12.dp).width(1.dp).height(40.dp).background(Edge.Text.copy(alpha = 0.22f)))
         Row(
             Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()).padding(vertical = 10.dp),

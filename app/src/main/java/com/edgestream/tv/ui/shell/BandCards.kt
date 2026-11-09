@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.edgestream.tv.data.Sports
 import com.edgestream.tv.ui.Edge
+import com.edgestream.tv.ui.glass
 import com.edgestream.tv.ui.components.TeamLogo
 import com.edgestream.tv.ui.components.WeatherGlyph
 import com.edgestream.tv.ui.glass.SECONDARY_TEXT_ALPHA
@@ -88,7 +89,8 @@ fun BandCard(
                 scaleX = scale; scaleY = scale
                 shape = CardShape; clip = true
             }
-            .background(Edge.Text.copy(alpha = 0.08f))
+            // Real frosted glass (the blurred background behind each card), never a see-through tint.
+            .glass(CardShape, Edge.Text.copy(alpha = 0.06f))
             .then(if (focused) Modifier.border(2.dp, Edge.Live, CardShape) else Modifier)
             .hoverFocus(requester)
             .onFocusChanged { focused = it.isFocused }

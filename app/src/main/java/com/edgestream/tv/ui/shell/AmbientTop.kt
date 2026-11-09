@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.edgestream.tv.data.PublicApis
 import com.edgestream.tv.data.Sports
+import com.edgestream.tv.ui.input.remoteClickable
 import com.edgestream.tv.ui.AppViewModel
 import com.edgestream.tv.ui.Edge
 import com.edgestream.tv.ui.Format
@@ -74,14 +75,13 @@ fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, deck: List<Ba
     val minute = clock / 60_000
     val cal = remember(minute) { Calendar.getInstance().apply { timeInMillis = clock } }
     Column(modifier) {
-        // Top right, tvOS style: the clock with voice beside it. The game hero owns the left.
+        // Top right, tvOS style: the clock. The game hero owns the left; voice lives in the dock.
         val events by vm.calendarEvents.collectAsStateWithLifecycle()
         val day = cal.get(Calendar.DAY_OF_YEAR)
         val upNext = remember(events, day) { com.edgestream.tv.data.upcoming(events, java.time.LocalDate.now(), days = 14, limit = 3) }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Spacer(Modifier.weight(1f))
             TimeTile(clock, settings.use24h, weather, settings.fahrenheit, upNext, Modifier)
-            VoiceButton(vm, Modifier.padding(start = 14.dp, top = 8.dp))
         }
         val preview by vm.preview.collectAsStateWithLifecycle()
         // At rest the hero turns through the best of Home (top games, the forecast, a warning,
@@ -120,7 +120,7 @@ fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, deck: List<Ba
  * does (rules first, Gemini only for a guessed search). Questions open Search, where Ask answers them.
  */
 @Composable
-private fun VoiceButton(vm: AppViewModel, modifier: Modifier) {
+internal fun VoiceButton(vm: AppViewModel, modifier: Modifier = Modifier) {
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val listen = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
@@ -137,20 +137,24 @@ private fun VoiceButton(vm: AppViewModel, modifier: Modifier) {
         }
     }
     var focused by remember { mutableStateOf(false) }
-    com.edgestream.tv.ui.components.FocusSurface(
-        onClick = {
-            runCatching {
-                listen.launch(
-                    android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                        .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM),
-                )
-            }.onFailure { vm.openSearch("") } // no speech service: typed search instead
-        },
-        modifier = modifier.onFocusChanged { focused = it.hasFocus }, shape = CircleShape, focusScale = 1.08f, glow = false,
+    // The dock's utility-icon look: a quiet circle that turns white when focused.
+    Box(
+        modifier.padding(horizontal = 3.dp).size(44.dp).clip(CircleShape)
+            .background(if (focused) Edge.Text else Edge.Text.copy(alpha = 0.08f))
+            .onFocusChanged { focused = it.isFocused }
+            .remoteClickable {
+                runCatching {
+                    listen.launch(
+                        android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM),
+                    )
+                }.onFailure { vm.openSearch("") } // no speech service: typed search instead
+            },
+        contentAlignment = Alignment.Center,
     ) {
         androidx.compose.material3.Icon(
             androidx.compose.material.icons.Icons.Rounded.Mic, "Voice",
-            tint = Edge.Text.copy(alpha = if (focused) 1f else 0.7f), modifier = Modifier.padding(10.dp).size(24.dp),
+            tint = if (focused) Edge.Bg else Edge.Text, modifier = Modifier.size(22.dp),
         )
     }
 }
@@ -327,7 +331,7 @@ private fun ScoreBug(g: Sports.Game, use24h: Boolean, latestPlay: Sports.Play?, 
         ) {
             BugSide(g.away, awayFill, if (upcoming) null else g.away.score, big, leading = true, Modifier.weight(1f))
             Row(
-                Modifier.fillMaxHeight().width(270.dp * big).background(Color(0xFF0E1013)).padding(horizontal = 14.dp),
+                Modifier.fillMaxHeight().width(310.dp * big).background(Color(0xFF0E1013)).padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
             ) {
                 val (main, label) = when (g.state) {
@@ -337,7 +341,7 @@ private fun ScoreBug(g: Sports.Game, use24h: Boolean, latestPlay: Sports.Play?, 
                 }
                 if (label.isNotEmpty()) Text(label, color = Color.White.copy(alpha = 0.85f), fontSize = 19.sp * big, fontWeight = FontWeight.Bold, maxLines = 1)
                 if (label.isNotEmpty()) Spacer(Modifier.width(14.dp))
-                Text(main, color = Color.White, fontSize = (if (main.length > 6) 30 else 40).sp * big, fontWeight = FontWeight.Black, maxLines = 1)
+                Text(main, color = Color.White, fontSize = (if (main.length > 6) 28 else 40).sp * big, fontWeight = FontWeight.Black, maxLines = 1)
             }
             BugSide(g.home, homeFill, if (upcoming) null else g.home.score, big, leading = false, Modifier.weight(1f))
         }
