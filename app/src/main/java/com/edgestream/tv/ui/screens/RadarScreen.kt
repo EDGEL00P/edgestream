@@ -190,16 +190,6 @@ fun RadarScreen(vm: AppViewModel) {
                 onDetails = { detailsOpen = true },
                 modifier = Modifier.fillMaxSize(),
             )
-            Box(
-                Modifier.align(Alignment.BottomStart).width(620.dp).height(390.dp)
-                    .background(
-                        Brush.horizontalGradient(
-                            0f to Edge.Bg.copy(alpha = SHADE_STRIP),
-                            0.55f to Edge.Bg.copy(alpha = SHADE_TEXT),
-                            1f to Color.Transparent,
-                        ),
-                    ),
-            )
             RadarHud(
                 detail = detail,
                 simple = simple,
@@ -483,127 +473,43 @@ private fun RadarHud(
     fahrenheit: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier) {
+    // Two lines only: the map is the content. Everything else lives in Details.
+    val code = detail?.code ?: simple?.code ?: 0
+    val isDay = detail?.isDay ?: simple?.isDay ?: true
+    val tempC = detail?.tempC ?: simple?.tempC ?: Double.NaN
+    val desc = (detail?.description ?: simple?.description).orEmpty()
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            WeatherGlyph(code, glyphSize = 26.dp, night = !isDay)
+            Text(
+                temp(tempC, fahrenheit), style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp),
+            )
+            Text(
+                desc, style = MaterialTheme.typography.titleMedium,
+                color = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA),
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 10.dp).weight(1f, fill = false),
+            )
+            if (warnings.isNotEmpty()) Pill("${warnings.size} ALERT", color = Edge.Alert)
+        }
+        val summary = buildList {
+            when {
+                analysis == null -> add("Waiting for the first radar frame…")
+                analysis.nearestKm == null -> add("No echoes within $rangeKm km")
+                else -> {
+                    add("Nearest rain ${analysis.nearestKm} km ${analysis.bearing}")
+                    analysis.maxDbz?.let { add("max $it dBZ") }
+                    analysis.motionKph?.let { add("moving $it km/h ${analysis.motionBearing}") }
+                }
+            }
+            frameTime?.let { add("Frame ${time(it, use24h)} · ${frameMinutes(it)} min ago") }
+        }.joinToString("  ·  ")
         Text(
-            "RIGHT NOW", style = MaterialTheme.typography.labelSmall,
-            color = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA), modifier = Modifier.padding(bottom = 6.dp),
+            summary, style = MaterialTheme.typography.labelLarge,
+            color = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA),
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
-        if (detail == null) {
-            Column(Modifier.padding(top = 8.dp)) {
-                if (simple != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        WeatherGlyph(simple.code, glyphSize = 34.dp, night = !simple.isDay)
-                        Text(
-                            temp(simple.tempC, fahrenheit),
-                            style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
-                            modifier = Modifier.padding(start = 10.dp),
-                        )
-                        Column(Modifier.padding(start = 10.dp)) {
-                            Text(simple.description, style = MaterialTheme.typography.titleMedium)
-                            Text(simple.city, style = MaterialTheme.typography.labelMedium, color = Edge.Dim)
-                        }
-                    }
-                    Text("Detailed station data unavailable — retrying.", style = MaterialTheme.typography.labelSmall, color = Edge.Faint, modifier = Modifier.padding(top = 4.dp))
-                } else {
-                    Text("Loading station data…", style = MaterialTheme.typography.bodyMedium, color = Edge.Dim)
-                }
-            }
-        } else {
-            Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                WeatherGlyph(detail.code, glyphSize = 34.dp, night = !detail.isDay)
-                Text(
-                    temp(detail.tempC, fahrenheit),
-                    style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
-                    modifier = Modifier.padding(start = 10.dp),
-                )
-                Column(Modifier.padding(start = 10.dp).weight(1f)) {
-                    Text(detail.description, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(
-                        "Feels ${temp(detail.feelsC, fahrenheit)}",
-                        style = MaterialTheme.typography.labelMedium, color = Edge.Dim, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            Text(
-                "H ${temp(detail.highC, fahrenheit)}  ·  L ${temp(detail.lowC, fahrenheit)}  ·  Rain ${detail.rainChance}% (${"%.1f".format(detail.rainSumMm)} mm)",
-                style = MaterialTheme.typography.labelMedium, color = Edge.Dim, modifier = Modifier.padding(top = 4.dp),
-            )
-            if (warnings.isNotEmpty()) {
-                Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Pill("ALERT", color = Edge.Alert)
-                    Text(
-                        "  ${warnings.first().title}", style = MaterialTheme.typography.labelMedium,
-                        color = Edge.Text, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            run {
-                val lightning = Trackers.lightning(detail)
-                val nearestStormKm = analysis?.cells?.minOfOrNull { it.km } ?: analysis?.nearestKm
-                val hail = Storm.hailRiskFor(
-                    lat = detail.lat,
-                    lon = detail.lon,
-                    maxDbz = analysis?.maxDbz,
-                    cape = detail.capeJkg.takeIf { !it.isNaN() },
-                    lightningLevel = lightning.level,
-                    nearestStormKm = nearestStormKm,
-                )
-                Text(
-                    "RISK", style = MaterialTheme.typography.labelSmall,
-                    color = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA), modifier = Modifier.padding(top = 10.dp),
-                )
-                RiskRow("Storms", detail.stormRisk)
-                RiskRow("Lightning", lightning.level)
-                RiskRow("Hail", hail.levelLabel.lowercase())
-                Text(
-                    hail.reason,
-                    style = MaterialTheme.typography.labelSmall, color = Edge.Dim,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                Text(
-                    "BOM ${Storm.bomProductFor(detail.lat, detail.lon).id} · derived lightning, not measured strikes",
-                    style = MaterialTheme.typography.labelSmall, color = Edge.Faint,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-        Text(
-            "RADAR", style = MaterialTheme.typography.labelSmall,
-            color = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA), modifier = Modifier.padding(bottom = 4.dp),
-        )
-        if (analysis == null) {
-            Text("Waiting for the first radar frame…", style = MaterialTheme.typography.bodyMedium, color = Edge.Dim, modifier = Modifier.padding(top = 6.dp))
-        } else if (analysis.nearestKm == null) {
-            Text("No echoes within $rangeKm km.", style = MaterialTheme.typography.bodyMedium, color = Edge.Dim, modifier = Modifier.padding(top = 6.dp))
-        } else {
-            Text(
-                "Nearest rain  ${analysis.nearestKm} km ${analysis.bearing}",
-                style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp),
-            )
-            Text(
-                "Coverage ${if (analysis.coveragePct == 0) "<1%" else "${analysis.coveragePct}%"} within $rangeKm km  ·  max ${analysis.maxDbz ?: "—"} dBZ",
-                style = MaterialTheme.typography.labelMedium, color = Edge.Dim,
-            )
-            analysis.motionKph?.let {
-                Text(
-                    "Moving ${it} km/h ${analysis.motionBearing}",
-                    style = MaterialTheme.typography.labelMedium, color = Edge.Dim,
-                )
-            }
-            if (analysis.cells.isNotEmpty()) {
-                Text(
-                    "${analysis.cells.size} storm cell(s) · strongest ${analysis.cells.first().maxDbz} dBZ",
-                    style = MaterialTheme.typography.labelMedium, color = Edge.Text,
-                )
-            }
-        }
-        frameTime?.let {
-            Text("Frame ${time(it, use24h)}  ·  ${frameMinutes(it)} min ago", style = MaterialTheme.typography.labelSmall, color = Edge.Faint, modifier = Modifier.padding(top = 4.dp))
-        }
-
-        Spacer(Modifier.height(4.dp))
     }
 }
 
@@ -649,16 +555,6 @@ private fun Section(title: String) {
     }
 }
 
-/** One risk line; only a severe level is coloured, everything else stays plain text. */
-@Composable
-private fun RiskRow(label: String, level: String) {
-    val severe = level.equals("Severe", true) || level.equals("Extreme", true)
-    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = Edge.Dim, modifier = Modifier.weight(1f))
-        Text(level.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = if (severe) Edge.Alert else Edge.Text)
-    }
-}
-
 @Composable
 private fun DetailRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 1.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -683,6 +579,14 @@ private fun RadarDetailsDialog(
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { delay(80); runCatching { focus.requestFocus() } }
     val lightning = Trackers.lightning(detail)
+    val hail = detail?.let { d ->
+        Storm.hailRiskFor(
+            lat = d.lat, lon = d.lon, maxDbz = analysis?.maxDbz,
+            cape = d.capeJkg.takeIf { !it.isNaN() },
+            lightningLevel = lightning.level,
+            nearestStormKm = analysis?.cells?.minOfOrNull { it.km } ?: analysis?.nearestKm,
+        )
+    }
     val tornadoes = warnings.filter {
         it.title.contains("tornado", true) || it.detail.contains("tornado", true)
     }
@@ -727,6 +631,16 @@ private fun RadarDetailsDialog(
                     DetailRow("Wind", detail?.let { "${it.windKph.roundToInt()} km/h ${compass(it.windDir)}" } ?: "—")
                     DetailRow("Gusts", detail?.let { "${it.gustKph.roundToInt()} km/h" } ?: "—")
                     DetailRow("Sunshine", detail?.let { "${it.sunshineMin.roundToInt()} min/15m" } ?: "—")
+
+                    Section("CONDITIONS")
+                    DetailRow("Feels like", detail?.let { temp(it.feelsC, fahrenheit) } ?: "—")
+                    DetailRow("High / low", detail?.let { "${temp(it.highC, fahrenheit)} / ${temp(it.lowC, fahrenheit)}" } ?: "—")
+                    DetailRow("Rain", detail?.let { "${it.rainChance}% (${"%.1f".format(it.rainSumMm)} mm)" } ?: "—")
+                    DetailRow("Storm risk", detail?.stormRisk ?: "Unknown")
+                    DetailRow("Lightning", lightning.level)
+                    DetailRow("Hail", hail?.levelLabel ?: "—")
+                    DetailRow("Hail note", hail?.reason ?: "—")
+                    DetailRow("BOM product", detail?.let { Storm.bomProductFor(it.lat, it.lon).id } ?: "—")
 
                     Section("STORM POTENTIAL")
                     DetailRow("CAPE", detail?.let { "${it.capeJkg.roundToInt()} J/kg" } ?: "—")
