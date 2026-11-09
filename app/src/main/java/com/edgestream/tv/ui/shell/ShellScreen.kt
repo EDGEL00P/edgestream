@@ -172,9 +172,17 @@ fun ShellScreen(
     // What the hero turns through at rest: live games first, then a warning and what you were watching.
     val deck = remember(allRows) {
         val items = allRows.values.flatten().flatMap { it.items }
+        // Live games first, then the soonest coming up (they carry the countdown); finished ones never.
         val games = items.filterIsInstance<BandItem.Game>().distinctBy { it.game.id }
-            .sortedBy { if (it.game.state == com.edgestream.tv.data.Sports.State.LIVE) 0 else 1 }.take(3)
-        games + listOfNotNull(items.firstOrNull { it is BandItem.Alert }, items.firstOrNull { it is BandItem.Resume })
+            .filter { it.game.state != com.edgestream.tv.data.Sports.State.FINAL }
+            .sortedWith(compareBy({ if (it.game.state == com.edgestream.tv.data.Sports.State.LIVE) 0 else 1 }, { it.game.startMs })).take(3)
+        // The newest film and the newest show on the provider.
+        val vods = items.filterIsInstance<BandItem.Vod>()
+        val newest = listOfNotNull(
+            vods.firstOrNull { it.item.kind == com.edgestream.tv.data.db.VodKind.MOVIE && !it.item.poster.isNullOrBlank() },
+            vods.firstOrNull { it.item.kind == com.edgestream.tv.data.db.VodKind.SERIES && !it.item.poster.isNullOrBlank() },
+        )
+        games + newest + listOfNotNull(items.firstOrNull { it is BandItem.Alert }, items.firstOrNull { it is BandItem.Resume })
     }
     val spotGame = (spotlight as? BandItem.Game)?.game
     // Home has no room light: two teams' colours over the whole screen read as a tint. Clear any

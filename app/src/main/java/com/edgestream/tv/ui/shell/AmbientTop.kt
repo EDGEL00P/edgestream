@@ -99,6 +99,7 @@ fun AmbientTop(vm: AppViewModel, spotlight: BandItem?, tile: Tile, deck: List<Ba
                     is BandItem.Game -> GameSpot(c.game, settings.use24h, settings.fahrenheit, preview?.name, Modifier.fillMaxSize())
                     is PublicApis.WeatherDetail -> ForecastSpot(c, settings.fahrenheit, Modifier.fillMaxSize())
                     is BandItem.Resume -> ResumeSpot(c.p, Modifier.fillMaxSize())
+                    is BandItem.Vod -> NewTitleSpot(c.item, Modifier.fillMaxSize())
                     // Nothing loaded yet: an empty hero, never a placeholder card.
                     null -> Unit
                     else -> Spotlight(c as BandItem, tile, settings.use24h, Modifier.fillMaxSize())
@@ -273,9 +274,6 @@ private fun GameSpot(g: Sports.Game, use24h: Boolean, fahrenheit: Boolean, previ
     androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
         val big = (maxHeight.value / 170f).coerceIn(0.7f, 1f)
         val tall = maxHeight >= 240.dp
-        Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.horizontalGradient(
-            0f to away.copy(alpha = 0.42f), 0.4f to Color.Transparent, 0.6f to Color.Transparent, 1f to home.copy(alpha = 0.42f),
-        )))
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             // The score bar carries the teams; above it, LIVE and where it's played and what the
             // weather is doing there (the channel while it previews).
@@ -284,8 +282,7 @@ private fun GameSpot(g: Sports.Game, use24h: Boolean, fahrenheit: Boolean, previ
                 g.venue,
                 venueWeather?.let { w -> if (w.indoor) "Indoors" else "${temp(w.tempC, fahrenheit)} ${w.description}" },
             ).joinToString("  ·  ")
-            if (place.isNotEmpty() || g.state == Sports.State.LIVE) Row(verticalAlignment = Alignment.CenterVertically) {
-                if (g.state == Sports.State.LIVE) { com.edgestream.tv.ui.components.LiveBadge(); Spacer(Modifier.width(14.dp)) }
+            if (place.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(place, color = Edge.Text.copy(alpha = 0.8f), fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 venueWeather?.takeIf { !it.indoor }?.let { WeatherGlyph(it.code, glyphSize = 18.dp, modifier = Modifier.padding(start = 8.dp)) }
             }
@@ -307,7 +304,7 @@ private fun GameSpot(g: Sports.Game, use24h: Boolean, fahrenheit: Boolean, previ
     }
 }
 
-private val SCORE_BUG_WIDTH = 800.dp
+private val SCORE_BUG_WIDTH = 1040.dp
 
 /**
  * The broadcast score bar, NBA-style: one straight strip in a thin silver frame. Each side has a
@@ -325,12 +322,12 @@ private fun ScoreBug(g: Sports.Game, use24h: Boolean, latestPlay: Sports.Play?, 
     val frame = Color(0xFFC9CED6)
     Column(modifier.width(SCORE_BUG_WIDTH * big)) {
         Row(
-            Modifier.fillMaxWidth().height(58.dp * big).border(2.dp, frame, RoundedCornerShape(3.dp))
+            Modifier.fillMaxWidth().height(78.dp * big).border(2.dp, frame, RoundedCornerShape(3.dp))
                 .padding(2.dp).clip(RoundedCornerShape(2.dp)),
         ) {
             BugSide(g.away, awayFill, if (upcoming) null else g.away.score, big, leading = true, Modifier.weight(1f))
             Row(
-                Modifier.fillMaxHeight().width(210.dp * big).background(Color(0xFF0E1013)).padding(horizontal = 14.dp),
+                Modifier.fillMaxHeight().width(270.dp * big).background(Color(0xFF0E1013)).padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
             ) {
                 val (main, label) = when (g.state) {
@@ -338,9 +335,9 @@ private fun ScoreBug(g: Sports.Game, use24h: Boolean, latestPlay: Sports.Play?, 
                     Sports.State.FINAL -> "FINAL" to ""
                     Sports.State.LIVE -> clockParts(g.detail).let { (clock, period) -> clock to period }
                 }
-                if (label.isNotEmpty()) Text(label, color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp * big, fontWeight = FontWeight.Bold, maxLines = 1)
+                if (label.isNotEmpty()) Text(label, color = Color.White.copy(alpha = 0.85f), fontSize = 19.sp * big, fontWeight = FontWeight.Bold, maxLines = 1)
                 if (label.isNotEmpty()) Spacer(Modifier.width(14.dp))
-                Text(main, color = Color.White, fontSize = (if (main.length > 6) 22 else 30).sp * big, fontWeight = FontWeight.Black, maxLines = 1)
+                Text(main, color = Color.White, fontSize = (if (main.length > 6) 30 else 40).sp * big, fontWeight = FontWeight.Black, maxLines = 1)
             }
             BugSide(g.home, homeFill, if (upcoming) null else g.home.score, big, leading = false, Modifier.weight(1f))
         }
@@ -363,18 +360,18 @@ private fun BugSide(t: Sports.Team, fill: Color, score: String?, big: Float, lea
     val ink = if (light) Color(0xFF0E1013) else Color.White
     val scoreFill = if (light) lerp(fill, Color.Black, 0.12f) else lerp(fill, Color.Black, 0.35f)
     val tile: @Composable () -> Unit = {
-        Box(Modifier.fillMaxHeight().width(66.dp * big).background(lerp(fill, Color.Black, 0.2f)), contentAlignment = Alignment.Center) {
-            TeamLogo(t.logo, t.name, size = 44.dp * big, onDark = true)
+        Box(Modifier.fillMaxHeight().width(88.dp * big).background(lerp(fill, Color.Black, 0.2f)), contentAlignment = Alignment.Center) {
+            TeamLogo(t.logo, t.name, size = 60.dp * big, onDark = true)
         }
     }
     val abbr: @Composable (Modifier) -> Unit = { m ->
         Box(m.fillMaxHeight().background(fill), contentAlignment = Alignment.Center) {
-            Text(t.abbr, color = ink, fontSize = 34.sp * big, fontWeight = FontWeight.Black, letterSpacing = (-0.5).sp, maxLines = 1)
+            Text(t.abbr, color = ink, fontSize = 46.sp * big, fontWeight = FontWeight.Black, letterSpacing = (-0.5).sp, maxLines = 1)
         }
     }
     val points: @Composable () -> Unit = {
-        Box(Modifier.fillMaxHeight().width(92.dp * big).background(scoreFill), contentAlignment = Alignment.Center) {
-            Text(score.orEmpty(), color = ink, fontSize = 36.sp * big, fontWeight = FontWeight.Black, maxLines = 1)
+        Box(Modifier.fillMaxHeight().width(124.dp * big).background(scoreFill), contentAlignment = Alignment.Center) {
+            Text(score.orEmpty(), color = ink, fontSize = 48.sp * big, fontWeight = FontWeight.Black, maxLines = 1)
         }
     }
     Row(modifier.fillMaxHeight()) {
@@ -420,6 +417,24 @@ internal fun kickoffCountdown(ms: Long): String {
     val m = s % 3_600 / 60
     val sec = s % 60
     return if (d > 0) "%dd %02d:%02d".format(d, h, m) else "%02d:%02d:%02d".format(h, m, sec)
+}
+
+/** A title new on the provider: its poster, NEW MOVIE / NEW SHOW, the title large, year and rating. */
+@Composable
+private fun NewTitleSpot(v: com.edgestream.tv.data.db.VodEntity, modifier: Modifier) {
+    Row(modifier.padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        AsyncImage(v.poster, v.name, Modifier.fillMaxHeight().aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)), contentScale = ContentScale.Crop)
+        Column(Modifier.padding(start = 28.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                if (v.kind == com.edgestream.tv.data.db.VodKind.SERIES) "NEW SHOW" else "NEW MOVIE",
+                color = Edge.Accent, fontSize = 18.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp,
+            )
+            Text(v.name.uppercase(), color = Edge.Text, fontSize = 58.sp, lineHeight = 60.sp, fontWeight = FontWeight.Black, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            listOfNotNull(v.year, v.rating?.let { "★ $it" }).joinToString("  ·  ").takeIf { it.isNotEmpty() }?.let {
+                Text(it, color = Edge.Text.copy(alpha = 0.8f), fontSize = 20.sp, fontWeight = FontWeight.Medium)
+            }
+        }
+    }
 }
 
 /** Continue watching: a poster card like the band's, its progress on the poster, title beside it. */
