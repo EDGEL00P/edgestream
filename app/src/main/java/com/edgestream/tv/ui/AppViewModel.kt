@@ -1430,9 +1430,6 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
         }
     }
 
-    fun playVod(item: VodEntity, fromStart: Boolean = false) =
-        playVod(item.key, item.name, item.poster, item.streamUrl, item.year, fromStart)
-
     /** Continue Watching: rebuilds the film or episode so it gets the same TorBox-first treatment as Play. */
     fun resume(p: ProgressEntity) {
         viewModelScope.launch {
@@ -1575,8 +1572,6 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
 
     /** Links still to try, in order, if the one playing fails: other TorBox versions, then the provider. */
     private var vodFallbacks = ArrayDeque<String>()
-
-    private fun holdNotice(text: String) { noticeJob?.cancel(); notice.value = text }
 
     /**
      * The title being started while its copy is found (add-ons, the provider): shown as a dark

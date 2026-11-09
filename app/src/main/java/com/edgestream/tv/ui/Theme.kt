@@ -1,10 +1,7 @@
 package com.edgestream.tv.ui
 
 import android.graphics.RenderEffect
-import android.graphics.Shader
-import android.os.Build
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.ui.Modifier
@@ -16,23 +13,18 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.asComposeRenderEffect
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -228,20 +220,12 @@ object Edge {
 
     /** Chrome that floats over content (toasts, chips): a light theme fill. */
     val Glass get() = palette.panel.copy(alpha = 0.15f)
-    val GlassEdge get() = palette.text.copy(alpha = 0.08f)
     /** Panels drawn over video: near-opaque smoke so the picture never bleeds through text. */
     val Smoke get() = palette.bg.copy(alpha = 0.92f)
-
-    /** Edge light: bright along the top where light would catch, fading towards the bottom. */
-    val GlassStroke: Brush get() = Brush.verticalGradient(
-        listOf(palette.text.copy(alpha = 0.32f), palette.text.copy(alpha = 0.09f), palette.text.copy(alpha = 0.04f)),
-    )
 
     /** Duotone accent for progress, primary actions and selected markers. */
     val AccentGradient: Brush
         get() = Brush.horizontalGradient(listOf(palette.accent, lerp(palette.accent, palette.secondary, 0.55f)))
-    val ScrimBottom: Brush get() = Brush.verticalGradient(listOf(Color.Transparent, Bg.copy(alpha = 0.92f)))
-    val ScrimLeft: Brush get() = Brush.horizontalGradient(listOf(Bg.copy(alpha = 0.96f), Bg.copy(alpha = 0.85f), Color.Transparent))
 }
 
 /** Extra inset on top of a screen's own margins, for TVs that crop the picture edges. */
@@ -283,14 +267,7 @@ object EdgeLayout {
     val PageTop = 36.dp
     /** Bottom breathing room for a page's final row or control group. */
     val PageBottom = 44.dp
-    val SectionGap = 36.dp
-    val SectionInnerGap = 20.dp
-    val RailGap = 24.dp
-    val RailEdge = 20.dp
-    val CardInset = 18.dp
-    val CardGap = 18.dp
     val FieldHeight = 62.dp
-    val ScreenHeaderGap = 24.dp
 }
 
 /**
@@ -384,9 +361,6 @@ private val Inter = androidx.compose.ui.text.font.FontFamily(
 
 /** Condensed scoreboard face for display type: headlines, scores, big numbers. */
 private val Display = androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(com.edgestream.tv.R.font.bebasneue_regular))
-
-private val WarmText = Color(0xFFF2EFE9)
-private val WarmDim = Color(0xFFA7A39C)
 
 private fun typography(p: Palette) = Typography(
     // Bebas is narrow and caps-only, so display sizes run larger with open tracking.

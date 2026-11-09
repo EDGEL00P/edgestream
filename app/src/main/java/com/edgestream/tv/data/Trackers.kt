@@ -1,6 +1,5 @@
 package com.edgestream.tv.data
 
-import java.io.StringReader
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.math.atan2

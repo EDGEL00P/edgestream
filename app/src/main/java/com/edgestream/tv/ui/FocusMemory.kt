@@ -41,9 +41,6 @@ object FocusMemory {
 
     fun last(row: String): String? = rows[row]
 
-    /** True when Home has a remembered card, so entry should restore it instead of the hero. */
-    fun hasHomeMemory(): Boolean = rows.keys.any { it.startsWith("home:") }
-
     private fun persist() {
         val values = rows.map { (k, v) -> "$k$SEP$v" }.toSet()
         prefs?.edit()?.putStringSet(KEY, values)?.apply()

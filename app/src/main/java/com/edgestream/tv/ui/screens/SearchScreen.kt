@@ -1,7 +1,6 @@
 package com.edgestream.tv.ui.screens
 
 import com.edgestream.tv.ui.reportsTextEntry
-import androidx.compose.ui.focus.focusRestorer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
@@ -9,8 +8,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material.icons.automirrored.rounded.*
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,15 +31,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -64,7 +58,6 @@ import com.edgestream.tv.data.SearchKit
 import com.edgestream.tv.data.SearchSuggestion
 import com.edgestream.tv.data.db.ChannelEntity
 import com.edgestream.tv.data.db.ProgrammeEntity
-import com.edgestream.tv.data.db.VodEntity
 import com.edgestream.tv.ui.AppViewModel
 import com.edgestream.tv.ui.Edge
 import com.edgestream.tv.ui.glass
@@ -74,7 +67,6 @@ import com.edgestream.tv.ui.components.FocusSurface
 import com.edgestream.tv.ui.components.Logo
 import com.edgestream.tv.ui.components.OneLine
 import com.edgestream.tv.ui.components.Pill
-import com.edgestream.tv.ui.components.PosterCard
 import com.edgestream.tv.ui.components.SectionTitle
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay

@@ -9,7 +9,6 @@ import com.edgestream.tv.ui.EdgeShapes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.drawWithContent
@@ -53,7 +52,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -149,8 +147,6 @@ fun FocusSurface(
         if (focused && beamed) coordsRef.v?.takeIf { it.isAttached }?.let { FocusBeam.claim(beamToken, it.boundsInRoot()) }
         onDispose { FocusBeam.release(beamToken) }
     }
-    // Glass gets its sheen and edge light; transparent list rows stay flat until focused.
-    val isGlass = fill.alpha > 0.02f
     val dimAlpha = when (tier) {
         DeviceTier.Tier.FULL -> 0.82f
         DeviceTier.Tier.BALANCED -> 0.87f

@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -49,7 +48,6 @@ import androidx.compose.ui.unit.dp
 import com.edgestream.tv.ui.AppViewModel
 import com.edgestream.tv.ui.Edge
 import com.edgestream.tv.ui.components.EdgeButton
-import com.edgestream.tv.ui.components.EmptyState
 import com.edgestream.tv.ui.components.FocusSurface
 import com.edgestream.tv.ui.components.OneLine
 import com.edgestream.tv.ui.components.ProgressLine

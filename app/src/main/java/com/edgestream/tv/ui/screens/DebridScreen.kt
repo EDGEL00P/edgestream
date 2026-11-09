@@ -25,10 +25,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -73,7 +71,6 @@ import com.edgestream.tv.ui.components.OneLine
 import com.edgestream.tv.ui.components.Pill
 import com.edgestream.tv.ui.components.ProgressLine
 import com.edgestream.tv.ui.components.Shelf
-import com.edgestream.tv.ui.glass
 import kotlinx.coroutines.delay
 
 /** The user's own TorBox cloud, laid out like a streaming service. */

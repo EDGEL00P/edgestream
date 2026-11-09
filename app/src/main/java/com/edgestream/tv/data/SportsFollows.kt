@@ -30,9 +30,6 @@ object SportsFollows {
     fun isFollowed(league: Sports.League, team: Sports.Team): Boolean =
         key(league, team) in _state.value
 
-    fun gameFollowed(game: Sports.Game): Boolean =
-        isFollowed(game.league, game.home) || isFollowed(game.league, game.away)
-
     fun toggle(league: Sports.League, team: Sports.Team) {
         val k = key(league, team)
         val next = if (k in _state.value) _state.value - k else _state.value + k

@@ -28,8 +28,6 @@ object Storm {
         val peakCurrent: Float? = null, // kA proxy when available, else null
     )
 
-    data class RadarFrame(val timestampSec: Long, val pathPrefix: String, val host: String)
-
     enum class RiskLevel(val code: Int) { LOW(0), MODERATE(1), HIGH(2), SEVERE(3) }
 
     data class HailRisk(
@@ -143,16 +141,4 @@ object Storm {
     /** Minimal cell view so Storm stays decoupled from Radar internals. */
     interface StormCellLike { val lat: Double; val lon: Double; val maxDbz: Int }
 
-    /** Adapt Radar.StormCell (pixel-space) without lat/lon by projection at call site. */
-    fun cellLatLon(cellX: Float, cellY: Float, mapLat: Double, mapLon: Double, kmPerPx: Double): Pair<Double, Double> {
-        // dx east, dy south => lat decreases southwards.
-        val dxKm = cellX * kmPerPx
-        val dyKm = cellY * kmPerPx
-        val lat = mapLat - dyKm / 111.0
-        val lon = mapLon + dxKm / (111.0 * cos(Math.toRadians(mapLat)).coerceAtLeast(0.2))
-        return lat to lon
-    }
-
-    fun rainViewerTileUrl(host: String, path: String, z: Int, x: Int, y: Int): String =
-        "$host$path/256/$z/$x/$y/6/1_0.png"
 }

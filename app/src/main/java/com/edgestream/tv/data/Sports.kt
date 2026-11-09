@@ -5,7 +5,6 @@ import com.edgestream.tv.data.db.ChannelEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -364,10 +363,6 @@ object Sports {
 
     /** Ids of the games the user has chosen to be alerted about; start and final alerts fire for these. */
     private val followed = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
-
-    fun isFollowing(id: String): Boolean = followed.contains(id)
-
-    fun toggleFollow(id: String) { if (!followed.add(id)) followed.remove(id) }
 
     fun followedIds(): Set<String> = followed
 
@@ -1165,20 +1160,6 @@ object Sports {
     }
 
     /**
-     * The channel in the user's lineup most likely to be showing [g]: an event channel naming
-     * both teams beats a network channel ("ESPN") from its broadcast list.
-     */
-    fun channelFor(g: Game, channels: List<ChannelEntity>): ChannelEntity? = ChannelLookup(channels).find(g)
-
-    /** Every plausible channel for [g], for the sheet's "also in your lineup" choices. */
-    fun channelsFor(g: Game, channels: List<ChannelEntity>): List<ChannelEntity> =
-        ChannelLookup(channels).candidates(g)
-
-    /** Broadcast names ESPN lists that the provider lineup does not carry. */
-    fun missingBroadcasts(g: Game, channels: List<ChannelEntity>): List<String> =
-        ChannelLookup(channels).missing(g)
-
-    /**
      * The game currently on [channel], if any. [programTitle] (the EPG programme) breaks ties when
      * one network carries several games at once. Provider event channels that only say "NBA 01"
      * are resolved through their programme title, or through their league when there is exactly
@@ -1223,19 +1204,6 @@ object Sports {
             if (leagueMatches.size == 1) return leagueMatches.first()
         }
         return null
-    }
-
-    /**
-     * Sports channels that actually exist in the provider lineup, ranked for the hub:
-     *  3 = a channel currently matched to a game in the scoreboard
-     *  2 = a dedicated sports network / event group ("Sky Sports", "NBA", "PPV")
-     *  0 = not sport
-     * The game match lets generic networks (CBS, NBC) surface only while they are carrying a game.
-     */
-    fun sportsChannelRank(c: ChannelEntity, hasGame: Boolean): Int {
-        if (hasGame) return 3
-        val group = NameCleaner.tidyGroup(c.groupName)
-        return if (SPORT_WORDS.containsMatchIn(c.name) || SPORT_WORDS.containsMatchIn(group)) 2 else 0
     }
 
     /** True when a programme title is clearly sport, or names a team from [games]. */

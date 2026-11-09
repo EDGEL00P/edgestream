@@ -33,7 +33,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -48,7 +47,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.lerp
@@ -66,7 +64,6 @@ import com.edgestream.tv.data.db.ProgrammeEntity
 import com.edgestream.tv.ui.AppViewModel
 import com.edgestream.tv.ui.Edge
 import com.edgestream.tv.ui.EdgeLayout
-import com.edgestream.tv.ui.FocusMemory
 import com.edgestream.tv.ui.components.FocusDimGroup
 import com.edgestream.tv.ui.glass
 import com.edgestream.tv.ui.Format

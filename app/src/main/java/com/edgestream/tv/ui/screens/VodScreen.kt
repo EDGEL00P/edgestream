@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,13 +28,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.graphicsLayer
@@ -49,10 +46,8 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.edgestream.tv.data.Library
 import com.edgestream.tv.data.db.ProgressEntity
 import com.edgestream.tv.data.db.VodEntity
 import com.edgestream.tv.data.db.VodKind
@@ -62,16 +57,13 @@ import com.edgestream.tv.ui.Edge
 import com.edgestream.tv.ui.bleed
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawWithContent
-import com.edgestream.tv.ui.glass
 import com.edgestream.tv.ui.Format
 import com.edgestream.tv.ui.components.EdgeButton
-import com.edgestream.tv.ui.components.EmptyState
 import com.edgestream.tv.ui.components.FocusSurface
 import com.edgestream.tv.ui.components.Logo
 import com.edgestream.tv.ui.components.OneLine
 import com.edgestream.tv.ui.components.Pill
 import com.edgestream.tv.ui.components.ProgressLine
-import com.edgestream.tv.ui.components.SectionTitle
 import kotlinx.coroutines.delay
 
 /**

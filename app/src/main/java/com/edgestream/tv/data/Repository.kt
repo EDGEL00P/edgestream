@@ -19,7 +19,6 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -995,8 +994,6 @@ class Repository(
     suspend fun markWatched(channel: ChannelEntity) = withContext(Dispatchers.IO) {
         db.user().touchHistory(HistoryEntity(channel.key, System.currentTimeMillis()))
     }
-
-    suspend fun channelByKey(key: String) = withContext(Dispatchers.IO) { db.channels().byKey(key) }
 
     suspend fun progress(key: String) = withContext(Dispatchers.IO) { db.user().progress(key) }
 

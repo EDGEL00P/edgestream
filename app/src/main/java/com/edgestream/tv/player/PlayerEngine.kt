@@ -331,8 +331,8 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
                 // cold-start path while still respecting the saved preferences on first use.
                 val s = settings.value
                 // Never stretch the picture: FIT is the default and the fix for "squashed" movies.
-                // SCALE_TO_FIT + RESIZE_MODE_FIT = letterbox, never distort. SmartFrame zoom
-                // stays at 1.0 (reset in VideoSurface) — any other scaling distorts faces.
+                // SCALE_TO_FIT + RESIZE_MODE_FIT = letterbox, never distort. Frame zoom stays at
+                // 1.0 (reset in VideoSurface) — any other scaling distorts faces.
                 player.videoScalingMode = androidx.media3.common.C.VIDEO_SCALING_MODE_SCALE_TO_FIT
                 player.videoChangeFrameRateStrategy =
                     if (s.matchFrameRate) C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS else C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF
@@ -466,8 +466,6 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
         if (exo.playbackState == Player.STATE_IDLE) exo.prepare()
         if (_state.value.isLive) holdForCushion() else exo.play()
     }
-
-    fun cycleAspect() { aspect.value = AspectMode.entries[(aspect.value.ordinal + 1) % AspectMode.entries.size] }
 
     /**
      * Side-loads online subtitles into the stream playing [url]. ExoPlayer only reads subtitle

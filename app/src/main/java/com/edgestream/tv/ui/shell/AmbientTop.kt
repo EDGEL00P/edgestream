@@ -1,7 +1,5 @@
 package com.edgestream.tv.ui.shell
 
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,7 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -63,7 +60,6 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-private val TileShape = RoundedCornerShape(24.dp)
 private val Dim get() = Edge.Text.copy(alpha = SECONDARY_TEXT_ALPHA)
 
 /**

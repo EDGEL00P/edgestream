@@ -14,9 +14,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -36,17 +34,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -77,7 +72,6 @@ import androidx.media3.common.C
 import coil3.compose.AsyncImage
 import com.edgestream.tv.data.Sports
 import com.edgestream.tv.data.db.ChannelEntity
-import com.edgestream.tv.player.TrackOption
 import com.edgestream.tv.ui.AppViewModel
 import com.edgestream.tv.ui.Edge
 import com.edgestream.tv.ui.LocalSafeArea
@@ -90,7 +84,6 @@ import com.edgestream.tv.ui.glass.SECONDARY_TEXT_ALPHA
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
-import com.edgestream.tv.ui.Screen
 import com.edgestream.tv.ui.digitOf
 import com.edgestream.tv.ui.VideoSurface
 import com.edgestream.tv.ui.components.FocusSurface
@@ -99,7 +92,6 @@ import com.edgestream.tv.ui.components.OneLine
 import com.edgestream.tv.ui.components.Pill
 import com.edgestream.tv.ui.components.ProgressLine
 import com.edgestream.tv.ui.components.TeamLogo
-import com.edgestream.tv.ui.components.SectionTitle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 

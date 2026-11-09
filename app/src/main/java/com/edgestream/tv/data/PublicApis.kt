@@ -98,10 +98,6 @@ object PublicApis {
     /** A guide file and, for city-specific guides, the state/territory its times belong to. */
     data class Guide(val url: String, val region: String? = null)
 
-    /** Country from an iptv-org style URL: …/countries/au.m3u -> "AU". */
-    fun countryFromUrl(url: String): String? =
-        Regex("""/countries/([a-z]{2})\.m3u""", RegexOption.IGNORE_CASE).find(url)?.groupValues?.get(1)?.uppercase()
-
     // ---- TVMaze / TMDB ----------------------------------------------------------------------
 
     /** Merged details for a film or show; any field may be missing. */

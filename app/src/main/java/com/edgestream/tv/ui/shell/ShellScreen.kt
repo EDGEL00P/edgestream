@@ -50,33 +50,19 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.util.lerp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.edgestream.tv.data.BackdropImages
 import com.edgestream.tv.ui.AppViewModel
 import com.edgestream.tv.ui.Edge
 import com.edgestream.tv.ui.glass.SECONDARY_TEXT_ALPHA
@@ -86,7 +72,6 @@ import com.edgestream.tv.ui.glass.SHADE_TEXT
 import com.edgestream.tv.ui.input.hoverFocus
 import com.edgestream.tv.ui.input.remoteClickable
 import kotlinx.coroutines.delay
-import kotlin.math.roundToInt
 
 val BAND_HEIGHT = 166.dp
 
@@ -101,7 +86,6 @@ val SECTION_PAD = 8.dp
 val TICKER_HEIGHT = 30.dp
 private val TICKER_GAP = 6.dp
 private val GAP = 12.dp
-private val PANEL_RADIUS = 26.dp
 
 /** The preview band slides away after this long with the remote idle on the dock. */
 const val BAND_IDLE_MS = 6_000L

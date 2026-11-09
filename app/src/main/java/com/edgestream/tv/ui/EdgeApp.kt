@@ -8,27 +8,21 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Warning
@@ -65,10 +59,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.launch
 import com.edgestream.tv.player.PlayerEngine
-import com.edgestream.tv.ui.components.FocusSurface
 import com.edgestream.tv.ui.screens.AppsScreen
-import com.edgestream.tv.ui.screens.GuideScreen
-import com.edgestream.tv.ui.screens.LiveScreen
 
 import com.edgestream.tv.ui.screens.PlayerScreen
 import com.edgestream.tv.ui.screens.SearchScreen
@@ -515,10 +506,9 @@ fun VideoSurface(engine: PlayerEngine, modifier: Modifier = Modifier, frostVideo
         view?.resizeMode = engine.resizeModeFor(aspect, videoAspect, state.isLive)
     }
 
-    // Fit is explicit: AUTO is a hard fit and no snapshot-driven zoom is applied. The old
-    // SmartFrame loop cropped bars by scaling the content frame; because it re-measured every
-    // two seconds it could oscillate, and non-integer scaling left artifacts on the right and
-    // bottom edges. Use the Picture menu's Stretch/Zoom modes when cropping is wanted.
+    // Fit is explicit: AUTO is a hard fit and no snapshot-driven zoom is applied. Re-measuring
+    // burned-in bars every couple of seconds could oscillate, and non-integer scaling left
+    // artifacts on the right and bottom edges. Use the Picture menu's Stretch/Zoom modes.
     androidx.compose.runtime.LaunchedEffect(view) {
         val pv = view ?: return@LaunchedEffect
         val frame = pv.findViewById<android.view.View>(androidx.media3.ui.R.id.exo_content_frame) ?: return@LaunchedEffect

@@ -59,13 +59,4 @@ object Secrets {
     /** Decrypts a sealed value; a corrupted or invalidated Keystore entry becomes blank. */
     fun openOrBlank(value: String): String = runCatching { open(value) }.getOrDefault("")
 
-    /** For display: never the secret itself, only enough to recognise it. */
-    fun mask(plain: String): String = when {
-        plain.isBlank() -> ""
-        plain.length <= 4 -> "••••"
-        else -> "••••" + plain.takeLast(4)
-    }
-
-    /** A URL shown without any login, key or path: "http://user:pass@host:8080/get.php?..." → "host:8080". */
-    fun maskUrl(url: String): String = url.substringAfter("://").substringAfter('@').substringBefore('/').substringBefore('?')
 }

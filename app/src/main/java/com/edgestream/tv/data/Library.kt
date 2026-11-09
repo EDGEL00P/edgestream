@@ -142,9 +142,4 @@ object Library {
         return _state.value.lastEpisode[seriesKey]
     }
 
-    /** Series the viewer started, most recent first — the source for "Up next". */
-    fun recentSeries(limit: Int = 12): List<LastEpisode> {
-        ensureLoaded()
-        return _state.value.lastEpisode.values.sortedByDescending { it.updatedAt }.take(limit)
-    }
 }

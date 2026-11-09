@@ -60,8 +60,6 @@ object Profiles {
 
     fun add(name: String): Profile = Profile(java.util.UUID.randomUUID().toString().take(8), name.trim().ifEmpty { "Guest" }).also { save(_all.value + it) }
 
-    fun rename(id: String, name: String) = save(_all.value.map { if (it.id == id) it.copy(name = name.trim().ifEmpty { it.name }) else it })
-
     fun setPin(id: String, pin: String?) = save(_all.value.map { if (it.id == id) it.copy(pinHash = pin?.let { p -> ProfileCodec.hash(id, p) }) else it })
 
     /** The main profile can't be removed; removing the active one falls back to main. */

@@ -4,8 +4,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,7 +37,6 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,7 +49,6 @@ import com.edgestream.tv.ui.Edge
 import com.edgestream.tv.ui.glass
 import com.edgestream.tv.ui.components.depth
 import com.edgestream.tv.ui.components.Sheen
-import com.edgestream.tv.ui.components.TeamLogo
 import com.edgestream.tv.ui.components.WeatherGlyph
 import com.edgestream.tv.ui.glass.SECONDARY_TEXT_ALPHA
 import com.edgestream.tv.ui.input.cardOkSynonyms
