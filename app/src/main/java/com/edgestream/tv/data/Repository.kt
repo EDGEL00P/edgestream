@@ -106,9 +106,6 @@ class Repository(
     private val epgMap: EpgMap,
 ) {
     private val refreshLock = Mutex()
-    /** The provider's films and series, as a play source only (see [providerMovie]). */
-    private val providerLibrary = ProviderLibrary(cacheDir)
-    private val libraryLocks = HashMap<Long, Mutex>()
     private val _status = MutableStateFlow(SyncStatus())
     val status: StateFlow<SyncStatus> = _status
 
@@ -120,14 +117,9 @@ class Repository(
     val continueWatching get() = db.user().observeContinueWatching()
     val programmeCount get() = db.programmes().observeCount()
 
-    /** Titles released this year or last, newest release first, then most recently added. */
-    fun recentVod(kind: VodKind, limit: Int = 30) =
-        db.vod().observeRecent(kind, java.time.Year.now().value - 1, limit).map { list -> list.dedupeVodTitles() }
     suspend fun vodByKey(key: String) = db.vod().byKey(key)
     suspend fun vodByKeys(keys: Collection<String>): List<VodEntity> =
         if (keys.isEmpty()) emptyList() else withContext(Dispatchers.IO) { db.vod().byKeys(keys.toList()) }
-    fun vodInCategories(kind: VodKind, categories: List<String>) =
-        db.vod().observeInCategories(kind, categories).map { list -> list.dedupeVodTitles() }
 
     // ---- sources ---------------------------------------------------------------------------
 
@@ -175,6 +167,12 @@ class Repository(
     suspend fun sealStoredLogins() = withContext(Dispatchers.IO) {
         db.sources().all().filter { (it.username.isNotEmpty() && !Secrets.isSealed(it.username)) || (it.password.isNotEmpty() && !Secrets.isSealed(it.password)) }
             .forEach { db.sources().upsert(it.sealed()) }
+    }
+
+    /** Films and series play through the add-ons only: clears what older versions kept from providers. */
+    suspend fun forgetProviderTitles() = withContext(Dispatchers.IO) {
+        db.vod().deleteProviderTitles()
+        db.user().deleteProviderProgress()
     }
 
     /** Sources whose last load never finished (e.g. the app was killed part-way). */
@@ -297,14 +295,9 @@ class Repository(
      */
     suspend fun purgeExcluded() = withContext(Dispatchers.IO) {
         val drop = db.channels().all().filter { !keepChannel(it) }.map { it.id }
-        val foreign = if (!settings.value.englishOnly) emptyList()
-            else db.vod().categories().filter { !EnglishFilter.isEnglishVodCategory(it) }
-        if (drop.isEmpty() && foreign.isEmpty()) return@withContext
-        // One transaction: lists reload once, and never see the library half-deleted.
-        db.withTransaction {
-            drop.chunked(500).forEach { db.channels().deleteIds(it) }
-            foreign.chunked(200).forEach { db.vod().deleteCategories(it) }
-        }
+        if (drop.isEmpty()) return@withContext
+        // One transaction: lists reload once, and never see the lineup half-deleted.
+        db.withTransaction { drop.chunked(500).forEach { db.channels().deleteIds(it) } }
         db.programmes().deleteOrphans()
     }
 
@@ -316,19 +309,10 @@ class Repository(
             return if (n == 1) base else "$base#$n"
         }
         val channels = ArrayList<ChannelEntity>()
-        val films = ArrayList<ProviderLibrary.Hit>()
-        val episodes = ArrayList<ProviderLibrary.Hit>()
         result.entries.forEach { e ->
-            if (e.isVod) {
-                // Not a library to browse: an index Play looks titles up in.
-                val ep = ProviderLibrary.episodeOf(e.name)
-                if (ep != null) {
-                    episodes += ProviderLibrary.Hit(ProviderLibrary.key(ep.first) + ProviderLibrary.episodeSuffix(ep.second, ep.third), null, e.url)
-                } else {
-                    films += ProviderLibrary.Hit(ProviderLibrary.key(e.name), ProviderLibrary.yearOf(e.name), e.url)
-                }
-            } else {
-                channels += ChannelEntity(
+            // Films and episodes in a playlist are skipped: they play through the add-ons.
+            if (e.isVod) return@forEach
+            channels += ChannelEntity(
                     key = uniqueKey("${source.id}:L:${e.name}"),
                     sourceId = source.id, name = e.name, groupName = e.group, logo = e.logo,
                     streamUrl = e.url, epgId = e.tvgId ?: e.tvgName, tvgId = e.tvgId ?: e.tvgName, number = channels.size + 1,
@@ -341,14 +325,12 @@ class Repository(
                         else -> "default|${e.catchupSource.orEmpty()}"
                     },
                 )
-            }
         }
         val kept = languageFiltered(channels)
         replaceChannels(source, withLogos(kept))
         db.vod().deleteForSource(source.id)
-        val titles = providerLibrary.write(source.id, "movie", films.asSequence()) + providerLibrary.write(source.id, "episode", episodes.asSequence())
         // What was kept, as Xtream reports: the raw playlist size hid a filter that dropped everything.
-        return source.copy(headerEpgUrls = result.epgUrls.joinToString(","), channelCount = kept.size, vodCount = titles)
+        return source.copy(headerEpgUrls = result.epgUrls.joinToString(","), channelCount = kept.size, vodCount = 0)
     }
 
     private suspend fun refreshXtream(source: SourceEntity): SourceEntity {
@@ -419,97 +401,13 @@ class Repository(
         current = current.copy(channelCount = kept.size, lastError = null)
         db.sources().upsert(current)
 
-        // Films and series are not downloaded: On Demand browses the universal catalogue and
-        // Play looks the provider's copy up on demand (index rebuilt after this refresh).
+        // Films and series never come from the provider: they browse the universal catalogue
+        // and play through the add-ons. Rows an older version stored are cleared.
         db.vod().deleteForSource(source.id)
-        providerLibrary.forget(source.id)
         return current.copy(vodCount = 0)
     }
 
-    /** One request for the whole catalogue, or one per English category when English-only is on. */
-    private fun actionsFor(action: String, cats: Map<String, String>, englishOnly: Boolean): List<String> =
-        if (!englishOnly) listOf(action)
-        else cats.filterValues { EnglishFilter.isEnglishVodCategory(it) }.keys.map { "$action&category_id=$it" }
-
-    // ---- the provider's films and series, as a play source -----------------------------------
-
-    /** The provider's stream for a film, from the first source that carries it; null when none does. */
-    suspend fun providerMovie(title: String, year: String?): String? = withContext(Dispatchers.IO) {
-        for (source in db.sources().all()) {
-            val hit = when (source.type) {
-                SourceType.XTREAM -> { ensureXtreamIndex(source, "movie"); providerLibrary.find(source.id, "movie", title, year) }
-                else -> providerLibrary.find(source.id, "movie", title, year)
-            }
-            if (hit != null) return@withContext hit.ref
-        }
-        null
-    }
-
-    /** The provider's stream for one episode of a series; null when no source carries it. */
-    suspend fun providerEpisode(title: String, year: String?, season: Int, episode: Int): String? = withContext(Dispatchers.IO) {
-        for (source in db.sources().all()) {
-            val url = when (source.type) {
-                SourceType.XTREAM -> {
-                    ensureXtreamIndex(source, "series")
-                    val seriesId = providerLibrary.find(source.id, "series", title, year)?.ref?.toLongOrNull() ?: continue
-                    runCatching { xtream(source).seriesInfo(seriesId) }.getOrNull()
-                        ?.episodes?.firstOrNull { it.season == season && it.number == episode }?.url
-                }
-                else -> providerLibrary.find(source.id, "episode", title, null, ProviderLibrary.episodeSuffix(season, episode))?.ref
-            }
-            if (url != null) return@withContext url
-        }
-        null
-    }
-
     private fun xtream(source: SourceEntity) = XtreamApi(source.url, Secrets.open(source.username), Secrets.open(source.password))
-
-    /**
-     * Xtream has no search, so the first lookup in a day fetches the source's title list once
-     * (English categories only when English-only is on) into the index. One build per source at
-     * a time; a failed build leaves the old index in place.
-     */
-    private suspend fun ensureXtreamIndex(source: SourceEntity, kind: String) {
-        if (providerLibrary.isFresh(source.id, kind)) return
-        val lock = synchronized(libraryLocks) { libraryLocks.getOrPut(source.id) { Mutex() } }
-        lock.withLock {
-            if (providerLibrary.isFresh(source.id, kind)) return
-            val api = xtream(source)
-            val englishOnly = settings.value.englishOnly
-            val hits = ArrayList<ProviderLibrary.Hit>()
-            runCatching {
-                if (kind == "movie") {
-                    val cats = Http.withRetry { api.categories("get_vod_categories") }
-                    actionsFor("get_vod_streams", cats, englishOnly).forEach { action ->
-                        api.stream(action) { s ->
-                            val id = s["stream_id"] ?: return@stream
-                            val name = s["name"].orEmpty()
-                            hits += ProviderLibrary.Hit(
-                                ProviderLibrary.key(name), s["year"]?.ifBlank { null } ?: ProviderLibrary.yearOf(name),
-                                api.movieUrl(id, s["container_extension"]?.ifBlank { null } ?: "mp4"),
-                            )
-                        }
-                    }
-                } else {
-                    val cats = Http.withRetry { api.categories("get_series_categories") }
-                    actionsFor("get_series", cats, englishOnly).forEach { action ->
-                        api.stream(action) { s ->
-                            val id = s["series_id"] ?: return@stream
-                            val name = s["name"].orEmpty()
-                            hits += ProviderLibrary.Hit(
-                                ProviderLibrary.key(name), s["releaseDate"]?.take(4)?.ifBlank { null } ?: s["year"]?.ifBlank { null } ?: ProviderLibrary.yearOf(name), id,
-                            )
-                        }
-                    }
-                }
-            }.onFailure { e ->
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                android.util.Log.w("EdgeStream", "provider $kind index for ${source.name} failed", e)
-                return
-            }
-            providerLibrary.write(source.id, kind, hits.asSequence())
-        }
-    }
 
     /**
      * Gives every channel its [ChannelIdentity] (stored as [ChannelEntity.identity]) and its logo:
@@ -887,7 +785,6 @@ class Repository(
 
     suspend fun searchProgrammes(q: String) = withContext(Dispatchers.IO) { db.programmes().search(q, System.currentTimeMillis()) }
     suspend fun searchChannels(q: String) = withContext(Dispatchers.IO) { db.channels().search(q) }
-    suspend fun searchVod(q: String) = withContext(Dispatchers.IO) { db.vod().search(q).dedupeVodTitles() }
 
     // ---- catch-up --------------------------------------------------------------------------
 
@@ -954,16 +851,7 @@ class Repository(
     // ---- series ----------------------------------------------------------------------------
 
     suspend fun seriesInfo(item: VodEntity): XtreamApi.SeriesInfo? = withContext(Dispatchers.IO) {
-        if (isCatalogue(item.key)) return@withContext catalogueSeries(item)
-        val source = db.sources().get(item.sourceId) ?: return@withContext null
-        if (source.type != SourceType.XTREAM) return@withContext null
-        XtreamApi(source.url, Secrets.open(source.username), Secrets.open(source.password)).seriesInfo(item.xtreamId ?: return@withContext null)
-    }
-
-    suspend fun vodInfo(item: VodEntity): XtreamApi.VodInfo? = withContext(Dispatchers.IO) {
-        val source = db.sources().get(item.sourceId) ?: return@withContext null
-        if (source.type != SourceType.XTREAM || item.kind != VodKind.MOVIE) return@withContext null
-        runCatching { XtreamApi(source.url, Secrets.open(source.username), Secrets.open(source.password)).vodInfo(item.xtreamId ?: return@withContext null) }.getOrNull()
+        if (isCatalogue(item.key)) catalogueSeries(item) else null
     }
 
     /**
@@ -1002,14 +890,8 @@ class Repository(
     suspend fun metadata(item: VodEntity): PublicApis.Meta = withContext(Dispatchers.IO) {
         metaCache[item.key]?.let { return@withContext it }
         val isSeries = item.kind == VodKind.SERIES
-        val provider = vodInfo(item)?.let {
-            PublicApis.Meta(
-                plot = it.plot, backdrop = it.backdrop, cast = it.cast, director = it.director, genre = it.genre,
-                durationMin = it.durationSecs?.let { s -> (s / 60).toInt() }, rating = it.rating,
-                year = it.releaseDate?.take(4), trailer = it.trailer, tmdbId = it.tmdbId?.toIntOrNull(),
-            )
-        } ?: PublicApis.Meta(plot = item.plot, rating = item.rating, year = item.year)
-        var meta = provider.orElse(catalogueMeta(item)).orElse(catalogueSeeds[item.key]).orElse(PublicApis.tmdb(settings.value.tmdbApiKey, item.name, isSeries, item.year))
+        val stored = PublicApis.Meta(plot = item.plot, rating = item.rating, year = item.year)
+        var meta = stored.orElse(catalogueMeta(item)).orElse(catalogueSeeds[item.key]).orElse(PublicApis.tmdb(settings.value.tmdbApiKey, item.name, isSeries, item.year))
         if (isSeries && (meta.plot == null || meta.genre == null)) meta = meta.orElse(PublicApis.tvMazeShow(item.name))
         metaCache[item.key] = meta
         meta
@@ -1131,7 +1013,6 @@ class Repository(
     suspend fun saveProgress(p: ProgressEntity) = withContext(Dispatchers.IO) { db.user().saveProgress(p) }
 
     /** One row per title: providers often list the same film or series in several categories. */
-    private fun List<VodEntity>.dedupeVodTitles(): List<VodEntity> = dedupeTitles(this, { it.name }, { it.year })
 
 
     companion object {

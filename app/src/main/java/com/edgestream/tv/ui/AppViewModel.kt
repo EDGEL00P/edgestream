@@ -659,8 +659,36 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
         RefreshWorker.runNow(app, repo.addFreeChannels(if (local) countryCode else null)); done()
     }
 
-    val latestMovies = repo.recentVod(VodKind.MOVIE).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-    val latestSeries = repo.recentVod(VodKind.SERIES).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    /** New releases from the universal catalogue (Cinemeta's "New in <year>", real IMDb ids). */
+    val latestMovies = newReleases(movies = true).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val latestSeries = newReleases(movies = false).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    private fun newReleases(movies: Boolean) = flow {
+        val shelf = com.edgestream.tv.data.Catalog.shelves(movies, tmdbKey = false).first { it.id.startsWith("cm_new_") }
+        while (true) {
+            val titles = runCatching { com.edgestream.tv.data.Catalog.load(shelf, "", null, app.cacheDir) }.getOrDefault(emptyList())
+            emit(titles.filter { it.imdbId != null && !it.poster.isNullOrBlank() }.take(30).map { t ->
+                catalogueTitle(t.imdbId ?: t.id, movies, t.title, t.poster, t.rating, t.year, t.overview)
+            })
+            delay(6 * 3_600_000L)
+        }
+    }.flowOn(kotlinx.coroutines.Dispatchers.IO)
+
+    /** A catalogue title as a library row ("cat:M:tt…" / "cat:S:tt…", source 0). */
+    private fun catalogueTitle(id: String, movies: Boolean, name: String, poster: String?, rating: String?, year: String?, plot: String?) = VodEntity(
+        key = "cat:${if (movies) "M" else "S"}:$id", sourceId = 0,
+        kind = if (movies) VodKind.MOVIE else VodKind.SERIES, name = name, category = "Catalogue",
+        poster = poster, streamUrl = "", rating = rating, year = year, plot = plot,
+        added = System.currentTimeMillis(),
+    )
+
+    /** Opens a title's details; a catalogue title is kept first so details, My List and resume work. */
+    fun openTitle(v: VodEntity) {
+        viewModelScope.launch {
+            if (com.edgestream.tv.data.Repository.isCatalogue(v.key)) repo.rememberCatalogueTitle(v, null)
+            vodDetail.value = v
+        }
+    }
 
     // ---- navigation & playback -------------------------------------------------------------
 
@@ -812,6 +840,7 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
     init {
         // Logins saved before encryption existed get encrypted in place, once.
         viewModelScope.launch { runCatching { repo.sealStoredLogins() } }
+        viewModelScope.launch { runCatching { repo.forgetProviderTitles() } }
     }
 
     /** Set by the first key press; until then screens may place focus themselves as they load. */
@@ -1409,8 +1438,8 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
     /** A film or episode, with what's needed to find other versions of it. */
     data class VodTarget(
         val key: String, val title: String, val poster: String?, val subtitle: String?,
-        /** The IPTV provider's own link; the fallback. */
-        val providerUrl: String,
+        /** The viewer's own media server's copy, when it has one; the alternative to the add-ons. */
+        val serverUrl: String = "",
         val type: String, val name: String, val year: String?,
         val season: Int? = null, val episode: Int? = null,
         /** Known IMDb id (from the catalogue); skips the name lookup. */
@@ -1420,32 +1449,23 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
     )
 
     fun movieTarget(item: VodEntity) =
-        VodTarget(item.key, item.name, item.poster, item.year, item.streamUrl, "movie", item.name, item.year, imdbId = catalogueImdb(item.key))
+        VodTarget(item.key, item.name, item.poster, item.year, type = "movie", name = item.name, year = item.year, imdbId = catalogueImdb(item.key))
 
     fun episodeTarget(series: VodEntity, ep: com.edgestream.tv.data.parse.XtreamApi.Episode) = VodTarget(
         "${series.key}:E:${ep.id}", "${series.name} · S${ep.season}E${ep.number}", ep.image ?: series.poster, ep.title,
-        ep.url, "series", series.name, series.year, ep.season, ep.number, imdbId = catalogueImdb(series.key),
+        type = "series", name = series.name, year = series.year, season = ep.season, episode = ep.number, imdbId = catalogueImdb(series.key),
     )
 
     /** "cat:M:tt0111161" → tt0111161: catalogue titles carry their IMDb id in the key. */
     private fun catalogueImdb(key: String) =
         key.substringBefore(":E:").substringAfter(':').substringAfter(':').takeIf { com.edgestream.tv.data.Repository.isCatalogue(key) && it.startsWith("tt") }
 
-    /**
-     * A catalogue title has no provider link until it's played: look it up on the provider
-     * (by name and year, and season/episode for series) and fill it in. Unchanged when the
-     * target already has one or the provider doesn't carry the title.
-     */
-    private suspend fun withProviderCopy(t: VodTarget): VodTarget {
-        if (t.providerUrl.isNotBlank() || !com.edgestream.tv.data.Repository.isCatalogue(t.key)) return t
-        val season = t.season
-        val episode = t.episode
-        // The viewer's own media server first (local, usually the best copy), then the provider.
-        val imdb = t.imdbId ?: repo.catalogueImdb(t.key, series = season != null)
-        val url = imdb?.let { com.edgestream.tv.data.MediaServers.stream(it, t.name, season, episode) }
-            ?: if (season != null && episode != null) repo.providerEpisode(t.name, t.year, season, episode)
-            else repo.providerMovie(t.name, t.year)
-        return if (url != null) t.copy(providerUrl = url, imdbId = imdb ?: t.imdbId) else t
+    /** The viewer's own media server's copy of a catalogue title, filled in when it has one. */
+    private suspend fun withServerCopy(t: VodTarget): VodTarget {
+        if (t.serverUrl.isNotBlank() || !com.edgestream.tv.data.Repository.isCatalogue(t.key)) return t
+        val imdb = t.imdbId ?: repo.catalogueImdb(t.key, series = t.season != null)
+        val url = imdb?.let { com.edgestream.tv.data.MediaServers.stream(it, t.name, t.season, t.episode) }
+        return if (url != null) t.copy(serverUrl = url, imdbId = imdb) else t
     }
 
     private suspend fun targetFor(p: ProgressEntity): VodTarget? {
@@ -1569,7 +1589,6 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
      * the provider's own stream. Without addons it simply plays from the provider.
      */
     fun playPreferred(target: VodTarget, fromStart: Boolean = false) {
-        if (!debridAvailable) { playProvider(target, fromStart); return }
         startJob?.cancel()
         startJob = viewModelScope.launch {
             starting.value = target.title
@@ -1577,39 +1596,23 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
             startStep.value = "Finding the best copy"
             // Provider copy and TorBox versions run at the same time, not one after the other:
             // waiting for the provider check first was seconds of dead air on every play.
-            val providerDeferred = async { runCatching { withProviderCopy(target) }.getOrDefault(target) }
+            val serverDeferred = async { runCatching { withServerCopy(target) }.getOrDefault(target) }
             // Cleared however this ends: played, nothing found, or cancelled.
             val (t, found) = try {
-                val found = runCatching { findVersions(target) }.getOrDefault(emptyList()).filter { it.autoPlayable }
-                providerDeferred.await() to found
+                val found = if (!debridAvailable) emptyList()
+                else runCatching { findVersions(target) }.getOrDefault(emptyList()).filter { it.autoPlayable }
+                serverDeferred.await() to found
             } finally { starting.value = null; startingPoster.value = null }
             // runCatching above swallows cancellation: a Back pressed meanwhile must still win.
             ensureActive()
-            val chain = found.take(3).map { it.playUrl } + listOfNotNull(t.providerUrl.ifBlank { null })
-            if (chain.isEmpty()) { showNotice("${target.name} isn't available to play right now"); return@launch }
-            playVod(
-                t.key, t.title, t.poster, chain.first(), t.subtitle, fromStart,
-                saveUrl = t.providerUrl.ifBlank { chain.first() }, fallbacks = chain.drop(1),
-                imdbId = t.imdbId, tmdbId = t.tmdbId, season = t.season, episode = t.episode,
-            )
-        }
-    }
-
-    /** Straight from the IPTV provider, skipping TorBox. A catalogue title is looked up there first. */
-    fun playProvider(target: VodTarget, fromStart: Boolean = false) {
-        if (target.providerUrl.isBlank() && !com.edgestream.tv.data.Repository.isCatalogue(target.key)) { openVersions(target, fromStart); return }
-        startJob?.cancel()
-        startJob = viewModelScope.launch {
-            if (target.providerUrl.isBlank()) { startStep.value = "Checking your provider"; starting.value = target.title; startingPoster.value = target.poster }
-            val t = try { withProviderCopy(target) } finally { starting.value = null; startingPoster.value = null }
-            ensureActive()
-            if (t.providerUrl.isBlank()) {
-                if (debridAvailable) openVersions(t, fromStart)
-                else showNotice("${target.name} isn't on your provider. Add a stream add-on in Settings to play it.")
+            val chain = found.take(3).map { it.playUrl } + listOfNotNull(t.serverUrl.ifBlank { null })
+            if (chain.isEmpty()) {
+                showNotice(if (debridAvailable) "${target.name} isn't available to play right now" else "Add a stream add-on in Settings to play films and shows")
                 return@launch
             }
             playVod(
-                t.key, t.title, t.poster, t.providerUrl, t.subtitle, fromStart,
+                t.key, t.title, t.poster, chain.first(), t.subtitle, fromStart,
+                saveUrl = t.serverUrl.ifBlank { chain.first() }, fallbacks = chain.drop(1),
                 imdbId = t.imdbId, tmdbId = t.tmdbId, season = t.season, episode = t.episode,
             )
         }
@@ -1627,12 +1630,7 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
      * title under a "cat:" key, and Play finds a copy on the provider or through the add-ons.
      */
     fun openUniversal(item: BrowseItem, movies: Boolean) {
-        val title = VodEntity(
-            key = "cat:${if (movies) "M" else "S"}:${item.imdbId ?: item.id}", sourceId = 0,
-            kind = if (movies) VodKind.MOVIE else VodKind.SERIES, name = item.title, category = "Catalogue",
-            poster = item.poster, streamUrl = "", rating = item.rating, year = item.year, plot = item.overview,
-            added = System.currentTimeMillis(),
-        )
+        val title = catalogueTitle(item.imdbId ?: item.id, movies, item.title, item.poster, item.rating, item.year, item.overview)
         viewModelScope.launch {
             repo.rememberCatalogueTitle(
                 title, com.edgestream.tv.data.PublicApis.Meta(plot = item.overview, poster = item.poster, backdrop = item.backdrop, rating = item.rating, year = item.year),
@@ -1644,10 +1642,10 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
     fun openVersions(target: VodTarget, fromStart: Boolean = false) {
         versionSheet.value = VersionSheet(target, fromStart)
         viewModelScope.launch {
-            // The provider's copy is looked up alongside the add-ons, so it's offered in the sheet too.
-            val provider = this.async { withProviderCopy(target) }
+            // The viewer's own server's copy is looked up alongside the add-ons and offered too.
+            val server = this.async { withServerCopy(target) }
             val res = runCatching { findVersions(target) }
-            val t = provider.await()
+            val t = server.await()
             val sheet = versionSheet.value ?: return@launch
             if (sheet.target.key != t.key) return@launch
             versionSheet.value = sheet.copy(
@@ -1655,21 +1653,21 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
                 streams = res.getOrNull().orEmpty(),
                 message = res.exceptionOrNull()?.message
                     ?: if (res.getOrNull().isNullOrEmpty()) {
-                        if (t.providerUrl.isBlank()) "No version of this title yet, on your provider or the add-ons." else "No add-on version yet; your provider has it."
+                        if (t.serverUrl.isBlank()) "No version of this title on your add-ons yet." else "No add-on version yet; your media server has it."
                     } else null,
             )
         }
     }
 
-    /** From the sheet: [stream] null means the provider's own link. Falls back to the provider if it fails. */
+    /** From the sheet: [stream] null means the media server's copy, which is also the fallback. */
     fun playVersion(t: VodTarget, stream: com.edgestream.tv.data.StreamAddons.Stream?, fromStart: Boolean) {
         versionSheet.value = null
         vodDetail.value = null
-        val provider = t.providerUrl.ifBlank { null }
-        val first = stream?.playUrl ?: provider ?: return
+        val server = t.serverUrl.ifBlank { null }
+        val first = stream?.playUrl ?: server ?: return
         playVod(
             t.key, t.title, t.poster, first, t.subtitle, fromStart,
-            saveUrl = provider ?: first, fallbacks = listOfNotNull(provider.takeIf { stream != null }),
+            saveUrl = server ?: first, fallbacks = listOfNotNull(server.takeIf { stream != null }),
             imdbId = t.imdbId, tmdbId = t.tmdbId, season = t.season, episode = t.episode,
         )
     }

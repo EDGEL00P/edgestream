@@ -196,13 +196,11 @@ private fun MovieActions(
         val target = vm.movieTarget(item)
         val resumeAt = p?.positionMs?.takeIf { it > 30_000 }
         val verb = if (resumeAt != null) "Resume" else "Play"
-        if (debrid) {
-            EdgeButton("$verb", { vm.vodDetail.value = null; vm.playPreferred(target) }, Modifier.focusRequester(focus), primary = true, icon = Icons.Rounded.Bolt)
-            EdgeButton("$verb from Provider", { vm.vodDetail.value = null; vm.playProvider(target) }, icon = Icons.Rounded.LiveTv)
-        } else {
-            EdgeButton(if (resumeAt != null) "Resume from ${Format.clock(resumeAt)}" else "Play", { vm.vodDetail.value = null; vm.playProvider(target) }, Modifier.focusRequester(focus), primary = true, icon = Icons.Rounded.PlayArrow)
-        }
-        if (resumeAt != null) EdgeButton("Start Over", { vm.vodDetail.value = null; if (debrid) vm.playPreferred(target, fromStart = true) else vm.playProvider(target, fromStart = true) }, icon = Icons.Rounded.Replay)
+        EdgeButton(
+            if (resumeAt != null) "Resume from ${Format.clock(resumeAt)}" else verb, { vm.vodDetail.value = null; vm.playPreferred(target) },
+            Modifier.focusRequester(focus), primary = true, icon = Icons.Rounded.PlayArrow,
+        )
+        if (resumeAt != null) EdgeButton("Start Over", { vm.vodDetail.value = null; vm.playPreferred(target, fromStart = true) }, icon = Icons.Rounded.Replay)
         EdgeButton("Sources", { vm.openVersions(target) }, icon = Icons.Rounded.Layers)
         EdgeButton(if (inList) "In My List" else "My List", { vm.toggleMyList(item) }, icon = if (inList) Icons.Rounded.Check else Icons.Rounded.Add)
     }
@@ -278,7 +276,7 @@ private fun SeriesDetails(
                         EdgeButton(label, {
                             val t = vm.episodeTarget(item, nextEp)
                             vm.vodDetail.value = null
-                            if (vm.debridAvailable) vm.playPreferred(t) else vm.playProvider(t)
+                            vm.playPreferred(t)
                         }, Modifier.focusRequester(focus), primary = true, icon = Icons.Rounded.PlayArrow)
                         EdgeButton(if (inList) "In My List" else "My List", { vm.toggleMyList(item) }, icon = if (inList) Icons.Rounded.Check else Icons.Rounded.Add)
                     }
@@ -319,7 +317,7 @@ private fun EpisodeRow(
     FocusSurface(
         onClick = {
             val t = vm.episodeTarget(item, ep)
-            if (vm.debridAvailable) vm.openVersions(t) else { vm.vodDetail.value = null; vm.playProvider(t) }
+            vm.openVersions(t)
         },
         onLongClick = onToggleWatched,
         modifier = Modifier.fillMaxWidth().height(104.dp), focusScale = 1.02f, glow = false,

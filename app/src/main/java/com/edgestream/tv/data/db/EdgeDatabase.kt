@@ -112,25 +112,14 @@ data class GuideLink(val key: String, val epgId: String)
 
 @Dao
 interface VodDao {
-    @Transaction
-    @Query("SELECT DISTINCT category FROM vod")
-    suspend fun categories(): List<String>
-
-    @Query("DELETE FROM vod WHERE category IN (:categories)")
-    suspend fun deleteCategories(categories: List<String>)
-
-    @Transaction
-    // New means released recently, not re-added by the provider: a 1999 film added today isn't new.
-    @Query(
-        "SELECT * FROM vod WHERE kind = :kind AND CAST(substr(year, 1, 4) AS INTEGER) >= :minYear " +
-            "ORDER BY CAST(substr(year, 1, 4) AS INTEGER) DESC, added DESC LIMIT :limit",
-    )
-    fun observeRecent(kind: VodKind, minYear: Int, limit: Int): Flow<List<VodEntity>>
+    /** Titles an older version stored from a provider; only catalogue titles (source 0) remain. */
+    @Query("DELETE FROM vod WHERE sourceId != 0")
+    suspend fun deleteProviderTitles()
 
 
     @Transaction
-    @Query("SELECT * FROM vod WHERE kind = :kind AND category IN (:categories) ORDER BY added DESC, name")
-    fun observeInCategories(kind: VodKind, categories: List<String>): Flow<List<VodEntity>>
+
+
 
     @Query("SELECT * FROM vod WHERE `key` = :key LIMIT 1")
     suspend fun byKey(key: String): VodEntity?
@@ -138,9 +127,6 @@ interface VodDao {
     @Query("SELECT * FROM vod WHERE `key` IN (:keys)")
     suspend fun byKeys(keys: List<String>): List<VodEntity>
 
-    @Transaction
-    @Query("SELECT * FROM vod WHERE name LIKE '%' || :q || '%' ORDER BY name LIMIT 200")
-    suspend fun search(q: String): List<VodEntity>
 
     @Query("DELETE FROM vod WHERE sourceId = :sourceId")
     suspend fun deleteForSource(sourceId: Long)
@@ -316,6 +302,10 @@ interface UserDao {
 
     @Query("SELECT * FROM progress WHERE `key` IN (:keys)")
     suspend fun progressForKeys(keys: List<String>): List<ProgressEntity>
+
+    /** Resume points for the provider's own films and series ("<source>:M:…", "<source>:S:…"), which no longer play. */
+    @Query("DELETE FROM progress WHERE `key` GLOB '[0-9]*:[MS]:*'")
+    suspend fun deleteProviderProgress()
 
     @Query("DELETE FROM progress WHERE `key` = :key")
     suspend fun deleteProgress(key: String)

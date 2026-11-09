@@ -1,7 +1,6 @@
 package com.edgestream.tv.ui
 
 import com.edgestream.tv.data.Catalog
-import com.edgestream.tv.data.CategoryLabels
 import com.edgestream.tv.data.db.VodKind
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -28,9 +27,6 @@ data class BrowseShelf(val title: String, val items: List<BrowseItem>, val comin
 data class BrowsePage(
     val marquee: List<BrowseItem>,
     val shelves: List<BrowseShelf>,
-    val genres: List<CategoryLabels.Merged>,
-    /** The provider's own platform categories (streaming services). */
-    val collections: List<CategoryLabels.Merged>,
     /** Universal collections from TMDB, by group (streaming services, studios, franchises...). */
     val catalogCollections: List<Pair<Catalog.Group, List<Catalog.Collection>>> = emptyList(),
     /** The viewer's own collections, narrowed to this side (films or shows). */
@@ -70,7 +66,6 @@ object BrowseData {
             marquee = marquee.filter { it.backdrop != null }.distinctBy { it.id }.take(10),
             // The viewer's own servers lead: their Continue Watching is the most personal row.
             shelves = servers.await() + curated,
-            genres = emptyList(), collections = emptyList(),
             // The viewer's own collections replace the built-in ones when they load.
             catalogCollections = if (key.isBlank() || groups.isNotEmpty()) emptyList()
             else Catalog.collections(movies, region).groupBy { it.group }.toList(),

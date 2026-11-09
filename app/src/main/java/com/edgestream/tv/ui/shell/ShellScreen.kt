@@ -405,7 +405,7 @@ private fun Band(
                         is BandItem.Resume -> ResumeCard(item, req, editingRow,
                             onClick = { if (editingRow) remove(row, item) else vm.resume(item.p) }, onRemove = { remove(row, item) })
                         is BandItem.Watch -> WatchCard(item, req) { vm.openWatchItem(item.item) }
-                        is BandItem.Vod -> VodCard(item, req) { vm.vodDetail.value = item.item }
+                        is BandItem.Vod -> VodCard(item, req) { vm.openTitle(item.item) }
                         is BandItem.Alert -> AlertCard(item, req) { onEvent(ShellEvent.Open(Tile.WEATHER)) }
                         is BandItem.Day -> DayCard(item, settings.fahrenheit, req) { onEvent(ShellEvent.Open(Tile.WEATHER)) }
                     }

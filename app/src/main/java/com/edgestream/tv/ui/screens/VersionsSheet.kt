@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -68,7 +69,7 @@ fun VersionsSheet(vm: AppViewModel, sheet: AppViewModel.VersionSheet) {
             Text("Choose a Source", style = MaterialTheme.typography.headlineSmall)
             OneLine(t.title, Modifier.padding(top = 4.dp), MaterialTheme.typography.bodyMedium, Edge.Dim)
             // Catalogue titles have no details page of their own, so the watch list lives here.
-            if (t.providerUrl.isBlank()) {
+            if (com.edgestream.tv.data.Repository.isCatalogue(t.key)) {
                 val saved = vm.watchList.collectAsStateWithLifecycle().value.any { it.id == t.key }
                 com.edgestream.tv.ui.components.EdgeButton(
                     if (saved) "In My List" else "Add to My List",
@@ -81,10 +82,10 @@ fun VersionsSheet(vm: AppViewModel, sheet: AppViewModel.VersionSheet) {
                 Modifier.padding(top = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(top = 6.dp, bottom = 28.dp, start = 4.dp, end = 4.dp),
             ) {
-                if (t.providerUrl.isNotBlank()) item(key = "provider") {
+                if (t.serverUrl.isNotBlank()) item(key = "server") {
                     VersionRow(
-                        icon = { Icon(Icons.Rounded.LiveTv, null, Modifier.size(22.dp), tint = Edge.Dim) },
-                        title = "Your IPTV provider", details = "The provider's own stream", badges = emptyList(),
+                        icon = { Icon(Icons.Rounded.Dns, null, Modifier.size(22.dp), tint = Edge.Dim) },
+                        title = "Your media server", details = "Your own copy", badges = emptyList(),
                         modifier = if (sheet.streams.isNullOrEmpty()) Modifier.focusRequester(first) else Modifier,
                     ) { vm.playVersion(t, null, sheet.fromStart) }
                 }

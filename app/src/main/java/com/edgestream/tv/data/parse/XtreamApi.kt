@@ -32,13 +32,6 @@ class XtreamApi(baseUrl: String, private val username: String, private val passw
         val serverUrl: String?,
     )
 
-    /** Extra film details from get_vod_info; every field is optional because providers vary. */
-    data class VodInfo(
-        val plot: String?, val cast: String?, val director: String?, val genre: String?,
-        val durationSecs: Long?, val backdrop: String?, val trailer: String?, val releaseDate: String?,
-        val rating: String?, val tmdbId: String?,
-    )
-
     data class ShortEpg(val start: Long, val stop: Long, val title: String, val description: String?)
     data class Episode(
         val id: String, val season: Int, val number: Int, val title: String,
@@ -62,28 +55,6 @@ class XtreamApi(baseUrl: String, private val username: String, private val passw
             allowedFormats = (user["allowed_output_formats"] as? List<*>)?.map { it.toString() }.orEmpty(),
             timezone = server?.get("timezone")?.toString(),
             serverUrl = server?.get("url")?.toString(),
-        )
-    }
-
-    fun vodInfo(vodId: Long): VodInfo {
-        val root = readObject(api("get_vod_info") + "&vod_id=$vodId")
-        val info = root["info"] as? Map<*, *> ?: emptyMap<String, Any?>()
-        fun str(vararg keys: String) = keys.firstNotNullOfOrNull { k -> info[k]?.toString()?.takeIf { it.isNotBlank() && it != "null" } }
-        val backdrop = when (val b = info["backdrop_path"]) {
-            is List<*> -> b.firstOrNull()?.toString()
-            else -> b?.toString()
-        }?.takeIf { it.isNotBlank() }
-        return VodInfo(
-            plot = str("plot", "description"),
-            cast = str("cast", "actors"),
-            director = str("director"),
-            genre = str("genre"),
-            durationSecs = str("duration_secs")?.toLongOrNull(),
-            backdrop = backdrop ?: str("cover_big", "movie_image"),
-            trailer = str("youtube_trailer")?.let { if (it.startsWith("http")) it else "https://www.youtube.com/watch?v=$it" },
-            releaseDate = str("releasedate", "release_date"),
-            rating = str("rating"),
-            tmdbId = str("tmdb_id"),
         )
     }
 
@@ -143,42 +114,7 @@ class XtreamApi(baseUrl: String, private val username: String, private val passw
         }
     }
 
-    fun seriesInfo(seriesId: Long): SeriesInfo {
-        val root = readObject(api("get_series_info") + "&series_id=$seriesId")
-        val info = root["info"] as? Map<*, *>
-        val episodes = mutableListOf<Episode>()
-        when (val eps = root["episodes"]) {
-            is Map<*, *> -> eps.forEach { (season, list) -> addEpisodes(season.toString().toIntOrNull() ?: 0, list, episodes) }
-            is List<*> -> eps.forEach { addEpisodes(0, it, episodes) }
-        }
-        return SeriesInfo(
-            plot = info?.get("plot")?.toString(),
-            cover = info?.get("cover")?.toString(),
-            episodes = episodes.sortedWith(compareBy({ it.season }, { it.number })),
-        )
-    }
-
-    private fun addEpisodes(season: Int, list: Any?, out: MutableList<Episode>) {
-        (list as? List<*>)?.forEach { e ->
-            val m = e as? Map<*, *> ?: return@forEach
-            val info = m["info"] as? Map<*, *>
-            val id = m["id"]?.toString() ?: return@forEach
-            val ext = m["container_extension"]?.toString()?.ifBlank { null } ?: "mp4"
-            out += Episode(
-                id = id,
-                season = m["season"]?.toString()?.toIntOrNull() ?: season,
-                number = m["episode_num"]?.toString()?.toIntOrNull() ?: 0,
-                title = m["title"]?.toString().orEmpty(),
-                plot = info?.get("plot")?.toString()?.ifBlank { null },
-                image = info?.get("movie_image")?.toString()?.ifBlank { null },
-                durationSecs = info?.get("duration_secs")?.toString()?.toLongOrNull(),
-                url = "$base/series/$u/$p/$id.$ext",
-            )
-        }
-    }
-
     fun liveUrl(streamId: String, ext: String) = "$base/live/$u/$p/$streamId.$ext"
-    fun movieUrl(streamId: String, ext: String) = "$base/movie/$u/$p/$streamId.$ext"
     fun xmltvUrl() = "$base/xmltv.php?username=$u&password=$p"
 
     private fun api(action: String?): String =

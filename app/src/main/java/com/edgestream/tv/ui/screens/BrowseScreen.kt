@@ -61,7 +61,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.edgestream.tv.data.CategoryLabels
 import com.edgestream.tv.data.NameCleaner
 import com.edgestream.tv.data.db.VodKind
 import com.edgestream.tv.ui.AppViewModel
@@ -99,10 +98,8 @@ fun BrowseScreen(vm: AppViewModel, kind: VodKind, onArt: (String?) -> Unit = {})
     val page by produceState<BrowsePage?>(null, kind, settings.tmdbApiKey) {
         value = runCatching { BrowseData.load(vm, kind) }.getOrNull()
     }
-    var open by rememberSaveable(kind) { mutableStateOf<String?>(null) }
     var openCollection by rememberSaveable(kind) { mutableStateOf<String?>(null) }
     var openFolder by rememberSaveable(kind) { mutableStateOf<String?>(null) }
-    val openTile = page?.let { p -> (p.genres + p.collections).firstOrNull { it.label.name == open } }
     val openCat = page?.catalogCollections?.flatMap { it.second }?.firstOrNull { it.id == openCollection }
 
     val scope = rememberCoroutineScope()
@@ -111,7 +108,6 @@ fun BrowseScreen(vm: AppViewModel, kind: VodKind, onArt: (String?) -> Unit = {})
         if (key != null) scope.launch { vm.repo.vodByKey(key)?.let { vm.vodDetail.value = it } }
         else vm.openUniversal(item, movies = kind == VodKind.MOVIE)
     }
-    if (openTile != null) { CategoryGrid(vm, kind, openTile) { open = null }; return }
     if (openCat != null) { CollectionGrid(vm, kind, openCat, ::openItem) { openCollection = null }; return }
     val folder = page?.groups?.flatMap { it.folders }?.firstOrNull { it.id == openFolder }
     if (folder != null) { FolderPage(vm, folder, onArt, ::openItem) { openFolder = null }; return }
@@ -297,13 +293,6 @@ fun BrowseScreen(vm: AppViewModel, kind: VodKind, onArt: (String?) -> Unit = {})
                     }
                 }
             }
-            if (p.genres.isNotEmpty()) item(key = "genres") {
-                Shelf("Genres") {
-                    items(p.genres, key = { it.label.name }) { g ->
-                        WideTile(g.label.name, caption = "${g.count} titles", tint = tintFor(g.label.name)) { open = g.label.name }
-                    }
-                }
-            }
             // The viewer's own collections: each folder opens its sources as rows.
             p.groups.forEach { group ->
                 item(key = "collection:${group.id}") {
@@ -327,11 +316,6 @@ fun BrowseScreen(vm: AppViewModel, kind: VodKind, onArt: (String?) -> Unit = {})
                             else WideTile(c.name, caption = group.label, tint = tintFor(c.name)) { openCollection = c.id }
                         }
                     }
-                }
-            }
-            if (p.collections.isNotEmpty()) item(key = "collections") {
-                Shelf("On Your Provider") {
-                    items(p.collections, key = { it.label.name }) { c -> CollectionTile(c.label.name, c.count) { open = c.label.name } }
                 }
             }
         }
@@ -433,37 +417,6 @@ private fun FolderPage(
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-/** A genre or collection opened from its tile: every title in it, as a poster grid. */
-@OptIn(ExperimentalComposeUiApi::class)
-@Composable
-private fun CategoryGrid(vm: AppViewModel, kind: VodKind, tile: CategoryLabels.Merged, onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
-    val items by remember(kind, tile) { vm.repo.vodInCategories(kind, tile.raws) }
-        .collectAsStateWithLifecycle<List<com.edgestream.tv.data.db.VodEntity>?>(null)
-    val first = remember { FocusRequester() }
-    LaunchedEffect(items?.isNotEmpty()) { if (items?.isNotEmpty() == true) { delay(60); runCatching { first.requestFocus() } } }
-    Column(Modifier.fillMaxSize().padding(start = 32.dp, top = 28.dp)) {
-        Text(tile.label.name, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(end = 40.dp))
-        Text("${tile.count} titles · Back to return", style = MaterialTheme.typography.bodyMedium, maxLines = 1, modifier = Modifier.padding(top = 2.dp))
-        val list = items
-        if (list != null && list.isEmpty()) {
-            EmptyState("Nothing in ${tile.label.name} right now", "Back to return to the shelves.", Modifier.fillMaxSize())
-            return@Column
-        }
-        LazyVerticalGrid(
-            GridCells.Adaptive(CardSize.Poster),
-            Modifier.fillMaxSize().focusRestorer(),
-            contentPadding = PaddingValues(top = 20.dp, bottom = 40.dp, end = 40.dp),
-            horizontalArrangement = Arrangement.spacedBy(CardSize.RowGap),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            gridItemsIndexed(list.orEmpty(), key = { _, v -> v.key }) { i, v ->
-                TitleTile(NameCleaner.tidyTitle(v.name), v.poster, if (i == 0) Modifier.focusRequester(first) else Modifier, meta = v.year) { vm.vodDetail.value = v }
             }
         }
     }

@@ -33,16 +33,7 @@ object EnglishFilter {
     /** A live category worth downloading at all ("AM | USA NBC", "EU | UK SPORT", "24/7 | ENGLISH"). */
     fun isEnglishGroup(group: String): Boolean = !FOREIGN_GROUP.containsMatchIn(group) && ENGLISH_GROUP.containsMatchIn(group)
 
-    private val VOD_TAG = Regex("""^\s*\[([A-Z-]{2,12})]""", RegexOption.IGNORE_CASE)
     private val ADULT = Regex("""ADULT|XXX|\+18|PORN""", RegexOption.IGNORE_CASE)
-
-    /** A film/series category in English: "[EN] COMEDY", "[UK] DRAMA"; not "[DE] FILME" or "[MULTI-LANG] …". */
-    fun isEnglishVodCategory(category: String): Boolean {
-        if (ADULT.containsMatchIn(category)) return false
-        if (FOREIGN_GROUP.containsMatchIn(category)) return false
-        val tag = VOD_TAG.find(category)?.groupValues?.get(1)?.uppercase()
-        return if (tag != null) tag in ENGLISH_PREFIXES else isEnglishGroup(category)
-    }
 
     fun isEnglish(name: String, group: String, tvgId: String? = null): Boolean {
         val groupForeign = FOREIGN_GROUP.containsMatchIn(group)

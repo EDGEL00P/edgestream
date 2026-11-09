@@ -82,7 +82,6 @@ import kotlinx.coroutines.delay
 private data class Results(
     val channels: List<ChannelEntity> = emptyList(),
     val programmes: List<Pair<ProgrammeEntity, ChannelEntity>> = emptyList(),
-    val vod: List<VodEntity> = emptyList(),
     /** The universal catalogue: anything by name, playable through the debrid service. */
     val anywhereMovies: List<com.edgestream.tv.ui.BrowseItem> = emptyList(),
     val anywhereShows: List<com.edgestream.tv.ui.BrowseItem> = emptyList(),
@@ -135,10 +134,9 @@ fun SearchScreen(vm: AppViewModel) {
         val local = Results(
             channels = vm.display(vm.repo.searchChannels(q)),
             programmes = vm.repo.searchProgrammes(q).mapNotNull { p -> byEpg[p.epgId]?.firstOrNull()?.let { p to it } },
-            vod = vm.repo.searchVod(q),
         )
         results = local
-        // The provider's matches paint first; the universal catalogue follows.
+        // Channels and programmes paint first; the universal catalogue follows.
         fun items(list: List<com.edgestream.tv.data.Catalog.Title>) = list.map { t ->
             com.edgestream.tv.ui.BrowseItem(t.id, t.title, t.year, t.poster, t.backdrop, t.overview, t.rating, t.releaseDate, null, t.imdbId)
         }
@@ -185,7 +183,7 @@ fun SearchScreen(vm: AppViewModel) {
                 onClearRecent = { SearchKit.clearRecent() },
             )
         }
-        val empty = answers.isEmpty() && results.channels.isEmpty() && results.programmes.isEmpty() && results.vod.isEmpty() &&
+        val empty = answers.isEmpty() && results.channels.isEmpty() && results.programmes.isEmpty() &&
             results.anywhereMovies.isEmpty() && results.anywhereShows.isEmpty()
         if (empty && searching && query.trim().length >= 2) {
             // Still looking (the universal catalogue answers after the provider's own rows).
@@ -252,11 +250,6 @@ fun SearchScreen(vm: AppViewModel) {
                             }
                         }
                     }
-                }
-            }
-            if (results.vod.isNotEmpty()) item {
-                com.edgestream.tv.ui.components.Shelf("On your provider \u00b7 ${results.vod.size}") {
-                    items(results.vod, key = { it.key }) { v -> PosterCard(v) { vm.vodDetail.value = v } }
                 }
             }
             listOf(
