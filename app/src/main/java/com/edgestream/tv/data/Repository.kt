@@ -120,8 +120,9 @@ class Repository(
     val continueWatching get() = db.user().observeContinueWatching()
     val programmeCount get() = db.programmes().observeCount()
 
+    /** Titles released this year or last, newest release first, then most recently added. */
     fun recentVod(kind: VodKind, limit: Int = 30) =
-        db.vod().observeRecent(kind, limit).map { list -> list.dedupeVodTitles() }
+        db.vod().observeRecent(kind, java.time.Year.now().value - 1, limit).map { list -> list.dedupeVodTitles() }
     suspend fun vodByKey(key: String) = db.vod().byKey(key)
     suspend fun vodByKeys(keys: Collection<String>): List<VodEntity> =
         if (keys.isEmpty()) emptyList() else withContext(Dispatchers.IO) { db.vod().byKeys(keys.toList()) }

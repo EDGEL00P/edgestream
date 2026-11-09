@@ -120,8 +120,12 @@ interface VodDao {
     suspend fun deleteCategories(categories: List<String>)
 
     @Transaction
-    @Query("SELECT * FROM vod WHERE kind = :kind ORDER BY added DESC LIMIT :limit")
-    fun observeRecent(kind: VodKind, limit: Int): Flow<List<VodEntity>>
+    // New means released recently, not re-added by the provider: a 1999 film added today isn't new.
+    @Query(
+        "SELECT * FROM vod WHERE kind = :kind AND CAST(substr(year, 1, 4) AS INTEGER) >= :minYear " +
+            "ORDER BY CAST(substr(year, 1, 4) AS INTEGER) DESC, added DESC LIMIT :limit",
+    )
+    fun observeRecent(kind: VodKind, minYear: Int, limit: Int): Flow<List<VodEntity>>
 
 
     @Transaction
