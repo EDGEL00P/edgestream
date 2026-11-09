@@ -83,17 +83,27 @@ object StreamAddons {
         Manifest(b, m.optString("name").ifBlank { b.substringAfter("://").substringBefore('/') }, types)
     }
 
+    private const val CACHE_TTL_MS = 10 * 60 * 1000L
+    private val streamCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, List<Stream>>>()
+
     /**
      * Cached, ready-to-play streams from every addon at once, best first. Anything TorBox would
      * have to download first, or that the addon doesn't mark as cached, is left out. A slow or
-     * broken addon is dropped, not waited on.
+     * broken addon is dropped, not waited on. Results are cached 10 minutes so replaying a title
+     * (or zapping back to it) answers instantly.
      */
-    suspend fun streams(addons: List<String>, type: String, id: String): List<Stream> = coroutineScope {
-        addons.map { url ->
-            async(Dispatchers.IO) {
-                withTimeoutOrNull(20_000) { runCatching { fetch(base(url), type, id) }.getOrNull() }.orEmpty()
-            }
-        }.awaitAll().flatten().filter { it.cached == true }.sortedByDescending { it.score }
+    suspend fun streams(addons: List<String>, type: String, id: String): List<Stream> {
+        val key = "$type/$id"
+        streamCache[key]?.let { (at, list) -> if (System.currentTimeMillis() - at < CACHE_TTL_MS) return list }
+        val found = coroutineScope {
+            addons.map { url ->
+                async(Dispatchers.IO) {
+                    withTimeoutOrNull(8_000) { runCatching { fetch(base(url), type, id) }.getOrNull() }.orEmpty()
+                }
+            }.awaitAll().flatten().filter { it.cached == true }.sortedByDescending { it.score }
+        }
+        streamCache[key] = System.currentTimeMillis() to found
+        return found
     }
 
     private fun fetch(base: String, type: String, id: String): List<Stream> {

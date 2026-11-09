@@ -160,6 +160,9 @@ fun PlayerScreen(vm: AppViewModel) {
     var lastInput by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var toastUntil by remember { mutableLongStateOf(0L) }
     var digits by remember { mutableStateOf("") }
+    var skipFocused by remember { mutableStateOf(false) }
+    // Seek bubble (films/episodes): where a Left/Right press lands, over the artwork.
+    var seekPreview by remember { mutableStateOf<Long?>(null) }
     // A 400 ms tick for the time bar and toast. Only the leaf composables read its value, so the
     // ticker never recomposes the whole player screen (the old one re-evaluated everything at
     // 2.5 Hz for the entire time the player was open).
@@ -232,6 +235,8 @@ fun PlayerScreen(vm: AppViewModel) {
             .focusRequester(rootFocus)
             .onKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown || layer != Layer.NONE) return@onKeyEvent false
+                // A skip pill has focus: let D-pad focus run (OK = skip, Back returns to the root).
+                if (skipFocused) return@onKeyEvent false
                 val exo = vm.player.exo
                 val digit = digitOf(e.key)
                 when {
@@ -253,10 +258,12 @@ fun PlayerScreen(vm: AppViewModel) {
                     isLiveTv && e.key == Key.DirectionLeft -> { layer = Layer.CHANNELS; true }
                     isLiveTv && e.key == Key.DirectionRight -> { layer = Layer.BAR; true }
                     !isLiveTv && (e.key == Key.DirectionLeft || e.key == Key.MediaRewind) -> {
-                        exo.seekTo((exo.currentPosition - 10_000).coerceAtLeast(0)); flashInfo(); true
+                        val target = (exo.currentPosition - 10_000).coerceAtLeast(0)
+                        exo.seekTo(target); seekPreview = target; flashInfo(); true
                     }
                     !isLiveTv && (e.key == Key.DirectionRight || e.key == Key.MediaFastForward) -> {
-                        exo.seekTo(exo.currentPosition + 30_000); flashInfo(); true
+                        val target = exo.currentPosition + 30_000
+                        exo.seekTo(target); seekPreview = target; flashInfo(); true
                     }
                     !isLiveTv && (e.key == Key.DirectionUp || e.key == Key.DirectionDown) -> { layer = Layer.BAR; true }
                     else -> false
@@ -268,23 +275,62 @@ fun PlayerScreen(vm: AppViewModel) {
 
         // Skip intro / skip credits pills for episodes, floating over the picture.
         VodSkips(
-            vm, np, tick,
+            vm, np, tick, rootFocus,
+            onFocus = { skipFocused = it },
             Modifier.align(Alignment.BottomStart).padding(bottom = 96.dp, start = 48.dp),
         )
         UpNextCard(vm, np, tick)
 
-        if (st.buffering && st.error == null) CircularProgressIndicator(Modifier.align(Alignment.Center).size(56.dp), color = Edge.Accent, strokeWidth = 4.dp)
+        // Over the frozen picture: what is happening, and for live TV how full the cushion is.
+        // Once the picture actually plays, the loader goes whatever the buffering flag says.
+        if (st.buffering && st.error == null && !st.isPlaying) com.edgestream.tv.ui.components.EdgeLoader(
+            title = st.title,
+            step = when { st.rejoining -> "Rejoining live"; st.isLive -> "Buffering"; else -> "Loading" },
+            progress = if (st.isLive && st.cushionMs > 0) (st.bufferedMs.toFloat() / st.cushionMs).coerceIn(0f, 1f) else null,
+            poster = (np as? NowPlaying.Vod)?.poster ?: (np as? NowPlaying.Live)?.channel?.logo,
+            dim = 0.6f,
+        )
         ErrorCard(st.error, st.buffering, isLiveTv, Modifier.align(Alignment.Center))
 
-        // Auto captions: broadcast style, white on a black box, lifted above the control bar.
+        // Seek bubble (films/episodes): where the jump lands, over the title's artwork.
+        seekPreview?.let { target ->
+            val poster = (np as? NowPlaying.Vod)?.poster
+            val total = vm.player.exo.duration.coerceAtLeast(0)
+            androidx.compose.runtime.LaunchedEffect(target) {
+                kotlinx.coroutines.delay(1_400); seekPreview = null
+            }
+            Row(
+                Modifier.align(Alignment.TopEnd).padding(top = 48.dp, end = 48.dp)
+                    .clip(RoundedCornerShape(12.dp)).background(Color(0xE6000000)).padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                poster?.let {
+                    coil3.compose.AsyncImage(it, null, Modifier.size(width = 72.dp, height = 108.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                    Spacer(Modifier.width(14.dp))
+                }
+                Column {
+                    Text(Format.clock(target), style = MaterialTheme.typography.headlineMedium, color = Edge.Text)
+                    if (total > 0) Text("of ${Format.clock(total)}", style = MaterialTheme.typography.labelMedium, color = Edge.Dim)
+                }
+            }
+        }
+
+        // Auto captions, streaming style: clean white type with a soft shadow, no box.
         val caption by vm.player.captions.text.collectAsStateWithLifecycle()
         if (settings.autoCaptions && caption.isNotBlank() && layer != Layer.GUIDE) {
             Text(
-                caption, style = MaterialTheme.typography.headlineSmall, color = Edge.Text, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                caption,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    shadow = androidx.compose.ui.graphics.Shadow(
+                        color = Color.Black.copy(alpha = 0.85f),
+                        blurRadius = 10f,
+                        offset = androidx.compose.ui.geometry.Offset(0f, 2f),
+                    ),
+                ),
+                color = Color.White, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 maxLines = 2, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.align(Alignment.BottomCenter)
-                    .padding(bottom = if (layer == Layer.BAR) 300.dp else 64.dp, start = 160.dp, end = 160.dp)
-                    .clip(RoundedCornerShape(8.dp)).background(Color(0xCC000000)).padding(horizontal = 18.dp, vertical = 8.dp),
+                    .padding(bottom = if (layer == Layer.BAR) 300.dp else 84.dp, start = 200.dp, end = 200.dp),
             )
         }
 
@@ -442,6 +488,8 @@ private fun InfoToast(
 @Composable
 private fun VodSkips(
     vm: AppViewModel, np: NowPlaying?, tick: androidx.compose.runtime.State<Long>,
+    rootFocus: FocusRequester,
+    onFocus: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val vod = np as? NowPlaying.Vod ?: return
@@ -480,22 +528,37 @@ private fun VodSkips(
         ) {
             add("Skip credits" to (duration - 400).coerceAtLeast(position + 1))
         }
+        // NOTE: media chapters aren't exposed by this Media3 version (1.11.1 Timeline.Window
+        // has no chapters field), so chapter jumping stays with the D-pad seek keys.
     }
     if (pills.isEmpty()) return
 
+    // The pills take focus themselves (Netflix-style): OK skips, Back returns to the player root.
+    var pillFocused by remember { mutableStateOf(false) }
+    val firstPill = remember(vod.key, pills.first().first) { FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(pills.first().first) { runCatching { firstPill.requestFocus() } }
+    BackHandler(enabled = pillFocused) { runCatching { rootFocus.requestFocus() } }
+
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        pills.forEach { (label, target) ->
-            SkipPill(label) { exo.seekTo(target) }
+        pills.forEachIndexed { i, (label, target) ->
+            SkipPill(label, if (i == 0) firstPill else null, onFocus = { pillFocused = it; onFocus(it) }) { exo.seekTo(target) }
         }
     }
 }
 
 @Composable
-private fun SkipPill(label: String, onClick: () -> Unit) {
+private fun SkipPill(
+    label: String,
+    requester: FocusRequester? = null,
+    onFocus: (Boolean) -> Unit = {},
+    onClick: () -> Unit,
+) {
     FocusSurface(
         onClick = onClick, shape = EdgeShapes.Chip,
         color = Edge.Smoke.copy(alpha = 0.96f), focusedColor = Edge.Text, focusScale = 1.05f,
+        modifier = if (requester != null) Modifier.focusRequester(requester) else Modifier,
     ) { f ->
+        androidx.compose.runtime.LaunchedEffect(f) { onFocus(f) }
         Row(Modifier.padding(horizontal = 16.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
             androidx.compose.material3.Icon(
                 Icons.Rounded.SkipNext, label, Modifier.size(18.dp),
@@ -626,6 +689,12 @@ private fun NowInfo(
                         }
                         now != null -> {
                             OneLine(now.title, style = MaterialTheme.typography.titleLarge, color = Edge.Text)
+                            now.description?.takeIf { it.isNotBlank() }?.let {
+                                Text(
+                                    it.replace(Regex("<[^>]+>"), "").replace("&amp;", "&").trim(),
+                                    style = MaterialTheme.typography.bodyMedium, color = Edge.Text.copy(alpha = 0.85f), maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                             Text(
                                 "${Format.range(now.start, now.stop, use24h)} · ${Format.duration(now.stop - clock)} left" +
                                     (epg.second?.let { "   ·   Next: ${Format.time(it.start, use24h)} ${it.title}" } ?: ""),
@@ -637,6 +706,10 @@ private fun NowInfo(
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(Format.time(clock, use24h), style = MaterialTheme.typography.headlineSmall, color = Edge.Text)
+                    // Commercial meta: where the channel is from + what's playing (language/codec via track).
+                    com.edgestream.tv.data.NameCleaner.tidyGroup(ch.groupName).substringBefore(" | ").takeIf { it.isNotBlank() }?.let {
+                        Text(it, style = MaterialTheme.typography.labelMedium, color = Edge.Accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                     if (videoInfo.isNotEmpty()) Text(videoInfo, style = MaterialTheme.typography.labelMedium, color = Edge.Text.copy(alpha = 0.78f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }

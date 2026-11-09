@@ -1440,6 +1440,8 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
             runCatching { com.edgestream.tv.data.Debrid.cinemetaFind(t.type, name, t.year) }.getOrNull()
         }?.also { imdbIds[cacheKey] = it }
         val cloud = cloudVersions(t, name, imdb)
+        // Cloud copies are always ready and never expire: play them instantly, no addon wait.
+        if (cloud.isNotEmpty()) return cloud
         val urls = addonUrls
         val found = if (urls.isEmpty() || imdb == null) emptyList() else {
             val id = if (t.type == "series") "$imdb:${t.season ?: 1}:${t.episode ?: 1}" else imdb
@@ -1490,10 +1492,14 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
      * screen with the loading ring and the title, like a streaming app starting playback.
      */
     val starting = MutableStateFlow<String?>(null)
+    /** The starting title's poster, so the loading screen shows its artwork. */
+    val startingPoster = MutableStateFlow<String?>(null)
+    /** What starting is doing right now, in words, for the loading screen. */
+    val startStep = MutableStateFlow("")
     private var startJob: Job? = null
 
     /** Back on the starting screen: stop looking, play nothing. */
-    fun cancelStarting() { startJob?.cancel(); starting.value = null }
+    fun cancelStarting() { startJob?.cancel(); starting.value = null; startingPoster.value = null }
 
     /**
      * Play, TorBox first: the best ready version from the user's addons, then the next two, then
@@ -1504,11 +1510,16 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
         startJob?.cancel()
         startJob = viewModelScope.launch {
             starting.value = target.title
+            startingPoster.value = target.poster
+            startStep.value = "Finding the best copy"
+            // Provider copy and TorBox versions run at the same time, not one after the other:
+            // waiting for the provider check first was seconds of dead air on every play.
+            val providerDeferred = async { runCatching { withProviderCopy(target) }.getOrDefault(target) }
             // Cleared however this ends: played, nothing found, or cancelled.
             val (t, found) = try {
-                val withCopy = withProviderCopy(target)
-                withCopy to runCatching { findVersions(withCopy) }.getOrDefault(emptyList()).filter { it.autoPlayable }
-            } finally { starting.value = null }
+                val found = runCatching { findVersions(target) }.getOrDefault(emptyList()).filter { it.autoPlayable }
+                providerDeferred.await() to found
+            } finally { starting.value = null; startingPoster.value = null }
             // runCatching above swallows cancellation: a Back pressed meanwhile must still win.
             ensureActive()
             val chain = found.take(3).map { it.playUrl } + listOfNotNull(t.providerUrl.ifBlank { null })
@@ -1526,8 +1537,8 @@ class AppViewModel : ViewModel(), com.edgestream.tv.remote.PhoneCommandTarget {
         if (target.providerUrl.isBlank() && !com.edgestream.tv.data.Repository.isCatalogue(target.key)) { openVersions(target, fromStart); return }
         startJob?.cancel()
         startJob = viewModelScope.launch {
-            if (target.providerUrl.isBlank()) starting.value = target.title
-            val t = try { withProviderCopy(target) } finally { starting.value = null }
+            if (target.providerUrl.isBlank()) { startStep.value = "Checking your provider"; starting.value = target.title; startingPoster.value = target.poster }
+            val t = try { withProviderCopy(target) } finally { starting.value = null; startingPoster.value = null }
             ensureActive()
             if (t.providerUrl.isBlank()) {
                 if (debridAvailable) openVersions(t, fromStart)

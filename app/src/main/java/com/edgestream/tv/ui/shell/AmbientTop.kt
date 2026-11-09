@@ -337,23 +337,23 @@ private fun LivePill() {
     }
 }
 
-/** Continue watching: the poster as a card, its progress under it, the title and time left beside it. */
+/** Continue watching: a poster card like the band's, its progress on the poster, title beside it. */
 @Composable
 private fun ResumeSpot(p: com.edgestream.tv.data.db.ProgressEntity, modifier: Modifier) {
     val left = ((p.durationMs - p.positionMs) / 60_000).coerceAtLeast(0)
     val done = if (p.durationMs > 0) (p.positionMs.toFloat() / p.durationMs).coerceIn(0f, 1f) else 0f
     Row(modifier.padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.fillMaxHeight().aspectRatio(2f / 3f)) {
-            AsyncImage(p.poster, p.title, Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Edge.Text.copy(alpha = 0.08f)),
-                contentScale = ContentScale.Crop)
-            Box(Modifier.padding(top = 5.dp).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(Edge.Text.copy(alpha = 0.25f))) {
+        // Poster card: full-height 2:3 artwork with the progress bar on its bottom edge.
+        Box(Modifier.fillMaxHeight().aspectRatio(2f / 3f).clip(RoundedCornerShape(12.dp)).background(Edge.Text.copy(alpha = 0.08f))) {
+            AsyncImage(p.poster, p.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(6.dp).background(Color.Black.copy(alpha = 0.55f))) {
                 Box(Modifier.fillMaxWidth(done).fillMaxHeight().background(Edge.Accent))
             }
         }
-        Column(Modifier.padding(start = 22.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.padding(start = 24.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("CONTINUE WATCHING", color = Edge.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-            Text(p.title.uppercase(), color = Edge.Text, fontSize = 44.sp, lineHeight = 48.sp, fontWeight = FontWeight.Black, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text("$left min left", color = Edge.Text.copy(alpha = 0.8f), fontSize = 17.sp)
+            Text(p.title.uppercase(), color = Edge.Text, fontSize = 48.sp, lineHeight = 52.sp, fontWeight = FontWeight.Black, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("$left min left  ·  ${(done * 100).toInt()}% watched", color = Edge.Text.copy(alpha = 0.8f), fontSize = 17.sp)
         }
     }
 }

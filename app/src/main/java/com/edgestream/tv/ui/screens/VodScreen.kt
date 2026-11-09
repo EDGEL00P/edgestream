@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -143,7 +144,15 @@ fun VodDetails(vm: AppViewModel, item: VodEntity) {
     }
     val safe = com.edgestream.tv.ui.LocalSafeArea.current
 
-    Box(Modifier.fillMaxSize()) {
+    // Artwork continuity: the details grow out of the card that opened them, Apple TV style.
+    val enter = remember { androidx.compose.animation.core.Animatable(0.92f) }
+    LaunchedEffect(item.key) { enter.snapTo(0.92f); enter.animateTo(1f, androidx.compose.animation.core.tween(240, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
+
+    Box(Modifier.fillMaxSize().graphicsLayer {
+        val k = enter.value
+        alpha = (k - 0.75f) / 0.25f
+        scaleX = k; scaleY = k
+    }) {
         // Picture and shade run edge to edge, past the overscan inset the text keeps to: no box.
         com.edgestream.tv.ui.AmbientBackground(Modifier.bleed(safe).background(Edge.Bg)) {
             Logo(info?.backdrop ?: item.poster, item.name, Modifier.fillMaxSize().alpha(0.35f), ContentScale.Crop)

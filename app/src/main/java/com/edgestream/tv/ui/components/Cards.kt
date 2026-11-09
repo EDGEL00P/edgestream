@@ -45,6 +45,7 @@ fun TitleTile(
     poster: String?,
     modifier: Modifier = Modifier,
     badge: String? = null,
+    meta: String? = null,
     dimmed: Boolean = false,
     onFocus: (() -> Unit)? = null,
     onClick: () -> Unit,
@@ -61,6 +62,14 @@ fun TitleTile(
                 title, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.align(Alignment.Center).padding(10.dp),
             )
+            // Netflix-style reveal: the title and its facts rise over the poster on focus.
+            if (focused && poster != null) {
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xF0000000)))))
+                Column(Modifier.align(Alignment.BottomStart).padding(10.dp)) {
+                    Text(title, style = MaterialTheme.typography.labelLarge, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (!meta.isNullOrBlank()) Text(meta, style = MaterialTheme.typography.labelMedium, color = Color(0xCCFFFFFF), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
         }
         badge?.let { Badge(it, Modifier.align(Alignment.TopStart).padding(8.dp), strong = !dimmed) }
     }

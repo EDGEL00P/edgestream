@@ -42,3 +42,25 @@ fun recoverableOnDemand(errorCode: Int): Boolean = errorCode in setOf(
     PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
     PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
 )
+
+/** What a live stream waiting for its cushion should do next. */
+enum class Cushion { WAIT, PLAY, REJOIN }
+
+/** Data stopped arriving for this long: the server dropped the feed; reconnect at the live edge. */
+const val FEED_STALL_MS = 6_000L
+/** How long past the cushion to wait before playing with what has arrived anyway. */
+const val CUSHION_GRACE_MS = 6_000L
+
+/**
+ * Live cushion, the way set-top boxes avoid stutter. A live feed only arrives as fast as real
+ * time, so whatever is buffered when the picture starts is all the slack the player will ever
+ * have: start after 0.8 s and any hiccup longer than 0.8 s stalls the picture. Live TV therefore
+ * starts, and resumes after a stall, only once [cushionMs] is buffered. A feed that stops
+ * growing is dead (reconnect); one that is merely slow plays once the grace runs out.
+ */
+fun cushion(bufferedMs: Long, cushionMs: Long, heldMs: Long, sinceGrowthMs: Long): Cushion = when {
+    bufferedMs >= cushionMs -> Cushion.PLAY
+    sinceGrowthMs >= FEED_STALL_MS -> Cushion.REJOIN
+    heldMs >= cushionMs + CUSHION_GRACE_MS && bufferedMs > 0 -> Cushion.PLAY
+    else -> Cushion.WAIT
+}

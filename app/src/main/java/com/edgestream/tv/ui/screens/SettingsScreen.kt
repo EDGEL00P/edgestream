@@ -386,12 +386,13 @@ private fun SettingsPageContent(vm: AppViewModel, page: SettingsPage) {
                 }
                 item { Toggle("Preview Last Channel", "Plays the last channel silently on Home when EdgeStream opens.", s.resumeLastChannel, icon = Icons.Rounded.Home) { set { it.copy(resumeLastChannel = !it.resumeLastChannel) } } }
                 item {
-                    Cycle("Live Delay", "${s.bufferMs} ms", "Lower sits closer to real time. Raise it if a stream stutters.", icon = Icons.Rounded.Speed) {
-                        set { it.copy(bufferMs = next(listOf(1_500, 2_000, 3_000, 5_000, 8_000, 12_000, 15_000), it.bufferMs)) }
+                    Cycle("Live Buffer", "%.1f seconds".format(s.bufferMs / 1000f), "Live TV starts once this much is buffered, and keeps that much in hand the whole time you watch. Raise it if channels stutter; lower it to sit closer to real time.", icon = Icons.Rounded.Speed) {
+                        set { it.copy(bufferMs = next(listOf(1_500, 3_000, 4_000, 6_000, 8_000, 12_000, 15_000), it.bufferMs)) }
                     }
                 }
                 item { Toggle("Match Frame Rate", "Switches the TV to 24, 25, 50 or 60 Hz to match the video. Removes judder; the screen blanks briefly on a change.", s.matchFrameRate, icon = Icons.Rounded.SlowMotionVideo) { set { it.copy(matchFrameRate = !it.matchFrameRate) } } }
                 item { Toggle("Tunnelled Playback", "Hardware audio and video sync. Smoother on SHIELD; turn it off if a stream stutters or has no sound.", s.tunneling, icon = Icons.Rounded.Cable) { set { it.copy(tunneling = !it.tunneling) } } }
+                item { Toggle("Strip Dolby Vision", "Skip Dolby Vision tracks and play the HEVC HDR10 base layer. DV freezes some decoders — turn this off only if you want the DV layer.", s.stripDolbyVision, icon = Icons.Rounded.MovieFilter) { set { it.copy(stripDolbyVision = !it.stripDolbyVision) } } }
                 item { Toggle("Play Next Episode", "When an episode ends, the next one starts on its own.", s.autoNextEpisode, icon = Icons.Rounded.SkipNext) { set { it.copy(autoNextEpisode = !it.autoNextEpisode) } } }
                 item { Toggle("Skip Intros and Credits", "Uses TheIntroDB's community timestamps. Sends the title's IMDb or TMDB id to theintrodb.org; no account needed.", s.useIntroDb, icon = Icons.Rounded.MovieFilter) { set { it.copy(useIntroDb = !it.useIntroDb) } } }
                 item { PanelSection("Audio & Subtitles") }

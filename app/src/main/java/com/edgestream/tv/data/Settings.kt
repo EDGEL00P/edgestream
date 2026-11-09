@@ -17,7 +17,7 @@ data class AppSettings(
     val hideScores: Boolean = false,
     val epgRefreshHours: Int = 12,
     /** Live target offset and read-ahead, in milliseconds (not whole seconds). */
-    val bufferMs: Int = 2_000,
+    val bufferMs: Int = 6_000,
     val lastChannelKey: String? = null,
     /** ISO 639 code such as "en"; blank = stream default. */
     val audioLanguage: String = "",
@@ -71,6 +71,8 @@ data class AppSettings(
     val matchFrameRate: Boolean = false,
     /** Hardware A/V tunnelling: smoother sync on SHIELD/Sony, but some streams misbehave. */
     val tunneling: Boolean = false,
+    /** Skip Dolby Vision tracks and play the HEVC HDR10 base layer (DV freezes some decoders). */
+    val stripDolbyVision: Boolean = true,
     /** Palette id from ui.Palettes. */
     val theme: String = "primetime",
     /** Safe area for TVs that crop the edges, as a percentage of screen width/height. */
@@ -111,7 +113,7 @@ class Settings(context: Context) {
         // Migrate the old whole-second key once: 2/4/8/15 s keeps its intent, but the new
         // value is stored and edited in milliseconds.
         // Below 1.5 s the player sits too close to the live edge and IPTV servers' jitter stalls it.
-        bufferMs = prefs.getInt("bufferMs", prefs.getInt("buffer", 2) * 1_000).let { if (it < 1_500) 2_000 else it },
+        bufferMs = prefs.getInt("bufferMs", prefs.getInt("buffer", 2) * 1_000).let { if (it < 1_500 || it == 2_000 || it == 4_000) 6_000 else it }, // 2 s / 4 s defaults were too thin a live cushion
         lastChannelKey = prefs.getString("lastChannel", null),
         audioLanguage = prefs.getString("audioLang", "") ?: "",
         subtitleLanguage = prefs.getString("subLang", "") ?: "",
@@ -144,6 +146,7 @@ class Settings(context: Context) {
         hideOffline = prefs.getBoolean("hideOffline", true),
         matchFrameRate = prefs.getBoolean("matchFps", false),
         tunneling = prefs.getBoolean("tunneling", false),
+        stripDolbyVision = prefs.getBoolean("stripDv", true),
         theme = prefs.getString("theme", "primetime") ?: "",
         overscanPercent = prefs.getInt("overscan", 5),
         radarSatellite = prefs.getBoolean("radarSat", false),
@@ -198,6 +201,7 @@ class Settings(context: Context) {
             .putBoolean("hideOffline", s.hideOffline)
             .putBoolean("matchFps", s.matchFrameRate)
             .putBoolean("tunneling", s.tunneling)
+            .putBoolean("stripDv", s.stripDolbyVision)
             .putString("theme", s.theme)
             .putInt("overscan", s.overscanPercent)
             .putBoolean("radarSat", s.radarSatellite)

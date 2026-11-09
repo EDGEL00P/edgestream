@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.edgestream.tv.data.CategoryLabels
 import com.edgestream.tv.data.NameCleaner
@@ -184,7 +185,7 @@ fun BrowseScreen(vm: AppViewModel, kind: VodKind, onArt: (String?) -> Unit = {})
                 HeroBanner(p.marquee, firstFocus, onFocus = { featured = it }, onOpen = ::openItem)
             }
             if (cw.isNotEmpty()) item(key = "cw") {
-                Shelf("Continue Watching") {
+                Shelf("Continue Watching · ${cw.size}") {
                     items(cw, key = { it.key }) { prog ->
                         ContinueTile(prog, onClick = { vm.resume(prog) }, onLongClick = { vm.removeContinue(prog.key) })
                     }
@@ -246,7 +247,7 @@ fun BrowseScreen(vm: AppViewModel, kind: VodKind, onArt: (String?) -> Unit = {})
             }
             p.shelves.forEach { shelf ->
                 item(key = "shelf:${shelf.title}") {
-                    Shelf(shelf.title) {
+                    Shelf(com.edgestream.tv.data.NameCleaner.tidyTitle(shelf.title), count = shelf.items.size) {
                         items(shelf.items, key = { it.id }) { item ->
                             TitleTile(
                                 item.title, item.poster,
@@ -256,6 +257,7 @@ fun BrowseScreen(vm: AppViewModel, kind: VodKind, onArt: (String?) -> Unit = {})
                                     item.vodKey != null -> "★"
                                     else -> null
                                 },
+                                meta = listOfNotNull(item.year, item.rating?.let { "★ $it" }).joinToString("  ·  ").ifBlank { null },
                                 dimmed = shelf.comingSoon,
                                 onFocus = { featured = item },
                             ) { openItem(item) }
@@ -307,7 +309,11 @@ fun BrowseScreen(vm: AppViewModel, kind: VodKind, onArt: (String?) -> Unit = {})
                 item(key = "collection:${group.id}") {
                     Shelf(group.title) {
                         items(group.folders, key = { it.id }) { f ->
-                            WideTile(f.title, image = f.cover, onFocus = { onArt(f.hero ?: f.cover) }) { openFolder = f.id }
+                            WideTile(
+                                f.title, image = f.cover,
+                                caption = if (f.sources.size > 1) "${f.sources.size} lists" else "1 list",
+                                onFocus = { onArt(f.hero ?: f.cover) },
+                            ) { openFolder = f.id }
                         }
                     }
                 }
@@ -349,11 +355,16 @@ private fun HeroBanner(items: List<BrowseItem>, first: FocusRequester, onFocus: 
             onFocus(next)
         }
     }
-    Column(Modifier.onFocusChanged { focusedIn = it.hasFocus }.padding(horizontal = 8.dp)) {
-        val c = current
+    val c = current
+    Row(Modifier.onFocusChanged { focusedIn = it.hasFocus }.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        // Commercial hero: the poster's artwork beside the title, like every streaming app.
+        Logo(c.poster, c.title, Modifier.height(190.dp).aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)), ContentScale.Crop)
+        Column(Modifier.padding(start = 26.dp).weight(1f)) {
         Text(
             com.edgestream.tv.data.NameCleaner.tidyTitle(c.title),
             style = MaterialTheme.typography.displayMedium,
+            fontFamily = com.edgestream.tv.ui.glass.ClockFont,
+            fontSize = 72.sp, lineHeight = 74.sp, letterSpacing = 0.8.sp,
             maxLines = 2, overflow = TextOverflow.Ellipsis,
         )
         val meta = listOfNotNull(c.year, c.rating?.let { "★ $it" }).joinToString("  ·  ")
@@ -379,6 +390,7 @@ private fun HeroBanner(items: List<BrowseItem>, first: FocusRequester, onFocus: 
                     )
                 }
             }
+        }
         }
     }
 }
@@ -451,7 +463,7 @@ private fun CategoryGrid(vm: AppViewModel, kind: VodKind, tile: CategoryLabels.M
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             gridItemsIndexed(list.orEmpty(), key = { _, v -> v.key }) { i, v ->
-                TitleTile(NameCleaner.tidyTitle(v.name), v.poster, if (i == 0) Modifier.focusRequester(first) else Modifier) { vm.vodDetail.value = v }
+                TitleTile(NameCleaner.tidyTitle(v.name), v.poster, if (i == 0) Modifier.focusRequester(first) else Modifier, meta = v.year) { vm.vodDetail.value = v }
             }
         }
     }
@@ -483,6 +495,7 @@ private fun CollectionGrid(vm: AppViewModel, kind: VodKind, c: com.edgestream.tv
                 TitleTile(
                     item.title, item.poster, if (item.id == list.first().id) Modifier.focusRequester(first) else Modifier,
                     badge = if (item.vodKey != null) "★" else null,
+                    meta = listOfNotNull(item.year, item.rating?.let { "★ $it" }).joinToString("  ·  ").ifBlank { null },
                 ) { onOpen(item) }
             }
         }

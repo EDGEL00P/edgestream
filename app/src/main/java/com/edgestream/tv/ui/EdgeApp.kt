@@ -392,7 +392,7 @@ fun EdgeApp(vm: AppViewModel = viewModel()) {
         ChannelPadOsd(vm, Modifier.align(Alignment.TopEnd))
         if (!fullscreen) vodDetail?.let { VodDetails(vm, it) }
         if (phoneRemote) PhoneRemoteDialog { phoneRemote = false }
-        if (textEntry.focused && !fullscreen && !onboarding) PhoneTypeHint(Modifier.align(Alignment.TopEnd))
+        if (textEntry.focused && !fullscreen && !onboarding) PhoneTypeHint(Modifier.align(Alignment.BottomEnd))
         if (!fullscreen) versionSheet?.let { com.edgestream.tv.ui.screens.VersionsSheet(vm, it) }
         // Never over full-screen video: sync progress waits until you leave the picture.
         StartingScreen(vm)
@@ -522,6 +522,22 @@ fun VideoSurface(engine: PlayerEngine, modifier: Modifier = Modifier, frostVideo
                 isFocusable = false
                 descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                 player = engine.exo
+                // Stream subtitles, streaming style: white type with a drop shadow, no black
+                // box, sitting clear of the screen edge like every commercial app.
+                findViewById<androidx.media3.ui.SubtitleView>(androidx.media3.ui.R.id.exo_subtitles)?.apply {
+                    setApplyEmbeddedStyles(false)
+                    setStyle(
+                        androidx.media3.ui.CaptionStyleCompat(
+                            android.graphics.Color.WHITE,
+                            android.graphics.Color.TRANSPARENT,
+                            android.graphics.Color.TRANSPARENT,
+                            androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW,
+                            android.graphics.Color.BLACK,
+                            null,
+                        ),
+                    )
+                    setBottomPaddingFraction(0.08f)
+                }
             }.also { view = it }
         },
         update = {
@@ -540,20 +556,16 @@ fun VideoSurface(engine: PlayerEngine, modifier: Modifier = Modifier, frostVideo
     )
 }
 
-/** A title starting while its copy is found: a dark screen, the loading ring and the title. */
+/** A title starting while its copy is found: its artwork edge to edge, the loading bar over it. */
 @Composable
 private fun StartingScreen(vm: AppViewModel) {
     val title = vm.starting.collectAsStateWithLifecycle().value ?: return
     BackHandler { vm.cancelStarting() }
-    Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            androidx.compose.material3.CircularProgressIndicator(Modifier.size(52.dp), color = Edge.Accent, strokeWidth = 4.dp)
-            Text(
-                com.edgestream.tv.data.NameCleaner.tidyTitle(title), style = MaterialTheme.typography.titleLarge, color = Edge.Text,
-                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(top = 24.dp).widthIn(max = 720.dp),
-            )
-        }
-    }
+    val step by vm.startStep.collectAsStateWithLifecycle()
+    val poster = vm.startingPoster.collectAsStateWithLifecycle().value
+    com.edgestream.tv.ui.components.EdgeLoader(
+        com.edgestream.tv.data.NameCleaner.tidyTitle(title), step.ifBlank { "Starting" }, progress = null, poster = poster,
+    )
 }
 
 /** Brief confirmations ("Reminder set…"), shown over everything including full-screen video. */

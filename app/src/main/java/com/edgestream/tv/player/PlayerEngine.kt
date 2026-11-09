@@ -41,9 +41,12 @@ data class PlaybackState(
     val videoHeight: Int = 0,
     val audio: List<TrackOption> = emptyList(),
     val subtitles: List<TrackOption> = emptyList(),
+    /** Live only: how much is buffered while the cushion fills, and the cushion it is filling to. */
+    val bufferedMs: Long = 0,
+    val cushionMs: Long = 0,
+    /** Live only: the feed stopped and the player is reconnecting at the live edge. */
+    val rejoining: Boolean = false,
 )
-
-private const val STALL_TIMEOUT_MS = 10_000L
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 enum class AspectMode(val label: String, val resizeMode: Int) {
@@ -85,17 +88,65 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
 
     private var retries = 0
 
-    /**
-     * A live stream stuck buffering usually means the server stopped feeding this connection.
-     * Rejoining at the live edge recovers far faster than waiting for the buffer to refill.
-     */
-    private val stallWatchdog = Runnable {
-        if (exo.playbackState == Player.STATE_BUFFERING && _state.value.isLive && _state.value.url != null) {
-            // Quiet, like a set-top box: the loading ring only, no narration.
-            _state.value = _state.value.copy(buffering = true, error = null)
-            exo.seekToDefaultPosition()
-            exo.prepare()
+    // Live cushion (see [cushion]): held paused while the buffer fills, checked every 100 ms.
+    private var holding = false
+    private var holdStart = 0L
+    private var lastBuffered = 0L
+    private var lastGrowth = 0L
+    private fun cushionMs() = settings.value.bufferMs.coerceIn(1_000, 30_000).toLong()
+
+    private val cushionCheck = object : Runnable {
+        override fun run() {
+            val s = _state.value
+            if (!holding || !s.isLive || s.url == null) return
+            val now = android.os.SystemClock.uptimeMillis()
+            val buffered = exo.totalBufferedDuration
+            if (buffered > lastBuffered + 50) lastGrowth = now
+            lastBuffered = buffered
+            _state.value = s.copy(bufferedMs = buffered, cushionMs = cushionMs())
+            when (cushion(buffered, cushionMs(), now - holdStart, now - lastGrowth)) {
+                Cushion.PLAY -> { holding = false; _state.value = _state.value.copy(rejoining = false); exo.playWhenReady = true }
+                Cushion.REJOIN -> {
+                    // The server stopped feeding this connection: a fresh one at the live edge
+                    // recovers far faster than waiting on the dead one.
+                    _state.value = _state.value.copy(rejoining = true, bufferedMs = 0)
+                    exo.seekToDefaultPosition(); exo.prepare()
+                    holdStart = now; lastGrowth = now; lastBuffered = 0
+                    main.postDelayed(this, 100)
+                }
+                Cushion.WAIT -> main.postDelayed(this, 100)
+            }
         }
+    }
+
+    /** Pause a live stream until its cushion is buffered, then play. */
+    private fun holdForCushion() {
+        main.removeCallbacks(cushionCheck)
+        holding = true
+        holdStart = android.os.SystemClock.uptimeMillis(); lastGrowth = holdStart; lastBuffered = 0
+        exo.playWhenReady = false
+        _state.value = _state.value.copy(buffering = true, bufferedMs = 0, cushionMs = cushionMs())
+        main.post(cushionCheck)
+    }
+
+    private fun stopHolding() { holding = false; main.removeCallbacks(cushionCheck) }
+
+    /** Force the HEVC HDR10 base layer over Dolby Vision (DV freezes some decoders). */
+    private fun applyDvStrip() {
+        if (!settings.value.stripDolbyVision || !exoLazy.isInitialized()) return
+        val groups = exo.currentTracks.groups
+        fun isBaseLayer(i: Int, g: androidx.media3.common.Tracks.Group): Boolean {
+            val f = g.getTrackFormat(i)
+            val codec = (f.codecs ?: "").lowercase()
+            return f.sampleMimeType?.startsWith("video/") == true && "dv" !in codec && "dovi" !in codec && "dvhe" !in codec
+        }
+        val videoGroup = groups.indexOfFirst { g -> (0 until g.length).any { isBaseLayer(it, g) } }
+        if (videoGroup < 0) return
+        val group = groups[videoGroup]
+        val track = (0 until group.length).firstOrNull { isBaseLayer(it, group) } ?: return
+        exo.trackSelectionParameters = exo.trackSelectionParameters.buildUpon()
+            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, track))
+            .build()
     }
 
     private val listener = object : Player.Listener {
@@ -105,15 +156,16 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
-            main.removeCallbacks(stallWatchdog)
-            if (playbackState == Player.STATE_BUFFERING && _state.value.isLive) main.postDelayed(stallWatchdog, STALL_TIMEOUT_MS)
+            // A live stream that ran dry mid-play refills its whole cushion before it resumes,
+            // so one hiccup doesn't become a stutter every few seconds.
+            if (playbackState == Player.STATE_BUFFERING && _state.value.isLive && exo.playWhenReady && !holding) holdForCushion()
             _state.value = _state.value.copy(
-                buffering = playbackState == Player.STATE_BUFFERING,
+                buffering = holding || playbackState == Player.STATE_BUFFERING,
                 error = if (playbackState == Player.STATE_READY) null else _state.value.error,
             )
         }
 
-        override fun onTracksChanged(tracks: Tracks) = publishTracks(tracks)
+        override fun onTracksChanged(tracks: Tracks) { publishTracks(tracks); applyDvStrip() }
 
         override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
             if (videoSize.width > 0 && videoSize.height > 0) {
@@ -134,7 +186,7 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
                 _state.value = _state.value.copy(buffering = true, error = null)
                 val delay = (1_000L * retries).coerceAtMost(5_000L)
                 main.postDelayed({
-                    if (_state.value.url == url) { exo.seekToDefaultPosition(); exo.prepare(); exo.play() }
+                    if (_state.value.url == url) { exo.seekToDefaultPosition(); exo.prepare(); holdForCushion() }
                 }, delay)
             } else if (!_state.value.isLive && recoverableOnDemand(error.errorCode) && retries < 2) {
                 // A film whose audio track or decoder hung: start again from the same spot.
@@ -207,7 +259,7 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
             .connectTimeout(8, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
-            .connectionPool(okhttp3.ConnectionPool(8, 5, TimeUnit.MINUTES))
+            .connectionPool(okhttp3.ConnectionPool(16, 5, TimeUnit.MINUTES))
             .build()
         val http = androidx.media3.datasource.ResolvingDataSource.Factory(OkHttpDataSource.Factory(streamClient)) { spec ->
             val h = streamHeaders
@@ -256,7 +308,12 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
                     .setLiveMaxSpeed(1.08f),
             )
             .setTrackSelector(trackSelector)
-            .setBandwidthMeter(androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.getSingletonInstance(context))
+            // Assume a fast line from the first byte: adaptive quality starts high, not at 1 Mbps.
+            .setBandwidthMeter(
+                androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.Builder(context)
+                    .setInitialBitrateEstimate(10_000_000)
+                    .build(),
+            )
             .setLoadControl(loadControl)
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
@@ -282,6 +339,8 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
                     .setPreferredTextLanguage(s.subtitleLanguage.ifBlank { null })
                     .setSelectUndeterminedTextLanguage(s.subtitlesOn)
                     .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !s.subtitlesOn)
+                    // Always the highest-bitrate track the stream offers (4K where it exists).
+                    .setForceHighestSupportedBitrate(true)
                     .build()
                 player.addListener(listener)
                 if (com.edgestream.tv.data.Sports.traceOn) player.addAnalyticsListener(metrics)
@@ -356,9 +415,10 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
         if (com.edgestream.tv.data.Sports.traceOn) { metrics.summary(); metrics.begin(title) }
         // Tunnelling is decided per stream, before prepare (see tunnelFor).
         trackSelector.parameters = trackSelector.buildUponParameters().setTunnelingEnabled(tunnelFor(settings.value.tunneling, isLive)).build()
+        stopHolding()
         exo.setMediaItem(item, startPositionMs)
         exo.prepare()
-        exo.playWhenReady = true
+        if (isLive) holdForCushion() else exo.playWhenReady = true
     }
 
     fun retry() {
@@ -382,7 +442,7 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
 
     fun stop() {
         if (!exoLazy.isInitialized()) return
-        main.removeCallbacks(stallWatchdog)
+        stopHolding()
         exo.stop()
         exo.clearMediaItems()
         exo.clearVideoSurface()
@@ -393,14 +453,14 @@ class PlayerEngine(private val context: Context, private val settings: Settings)
     /** App hidden: stop() keeps the playlist but frees the decoder (pause() would hold it). */
     fun releaseDecoder() {
         if (!exoLazy.isInitialized()) return
-        main.removeCallbacks(stallWatchdog)
+        stopHolding()
         exo.clearVideoSurface()
         exo.stop()
     }
     fun resume() {
         if (_state.value.url == null) return
         if (exo.playbackState == Player.STATE_IDLE) exo.prepare()
-        exo.play()
+        if (_state.value.isLive) holdForCushion() else exo.play()
     }
 
     fun cycleAspect() { aspect.value = AspectMode.entries[(aspect.value.ordinal + 1) % AspectMode.entries.size] }

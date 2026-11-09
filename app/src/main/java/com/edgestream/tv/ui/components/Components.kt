@@ -294,6 +294,8 @@ fun Shelf(
     modifier: Modifier = Modifier,
     /** When set, the viewport snaps to whole cards so the row never parks a half-poster at the edge. */
     itemWidth: Dp? = null,
+    /** Row context, commercial style: "Trending · 20". */
+    count: Int? = null,
     content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
 ) {
     Column(modifier) {
@@ -302,6 +304,12 @@ fun Shelf(
                 title, style = MaterialTheme.typography.titleLarge,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
+            count?.let {
+                Text(
+                    "  ·  $it", style = MaterialTheme.typography.labelLarge,
+                    color = Edge.Dim, maxLines = 1,
+                )
+            }
             Box(Modifier.weight(1f).padding(start = 16.dp).height(1.dp).background(Edge.Line))
         }
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {

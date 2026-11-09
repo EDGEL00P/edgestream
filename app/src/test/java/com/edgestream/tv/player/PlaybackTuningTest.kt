@@ -38,4 +38,15 @@ class PlaybackTuningTest {
         assertTrue(recoverableOnDemand(PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED))
         assertFalse(recoverableOnDemand(PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED))
     }
+
+    @Test fun liveWaitsForItsCushion() {
+        assertEquals(Cushion.WAIT, cushion(bufferedMs = 800, cushionMs = 4_000, heldMs = 900, sinceGrowthMs = 100))
+        assertEquals(Cushion.PLAY, cushion(bufferedMs = 4_000, cushionMs = 4_000, heldMs = 3_000, sinceGrowthMs = 100))
+    }
+
+    @Test fun deadFeedRejoinsButSlowFeedPlays() {
+        assertEquals(Cushion.REJOIN, cushion(bufferedMs = 1_000, cushionMs = 4_000, heldMs = 7_000, sinceGrowthMs = FEED_STALL_MS))
+        assertEquals(Cushion.PLAY, cushion(bufferedMs = 2_000, cushionMs = 4_000, heldMs = 4_000 + CUSHION_GRACE_MS, sinceGrowthMs = 500))
+        assertEquals("nothing at all yet keeps waiting", Cushion.WAIT, cushion(bufferedMs = 0, cushionMs = 4_000, heldMs = 11_000, sinceGrowthMs = 500))
+    }
 }

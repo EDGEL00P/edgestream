@@ -406,6 +406,11 @@ private fun GuideRow(
                 .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Category edge strip: the channel's own genre colour, like a broadcast EPG sidebar.
+            genreColor(ch.groupName, ch.name)?.let { c ->
+                Box(Modifier.width(4.dp).height(34.dp).clip(RoundedCornerShape(50)).background(c))
+                Box(Modifier.width(8.dp).height(1.dp))
+            }
             // Big providers number into the tens of thousands; never wrap.
             Text("${com.edgestream.tv.data.ChannelNumbers.lcn(ch)}", style = MaterialTheme.typography.labelMedium, color = Edge.Faint, maxLines = 1, softWrap = false, modifier = Modifier.width(48.dp))
             Logo(ch.logo, ch.name, Modifier.size(width = 48.dp, height = 34.dp))

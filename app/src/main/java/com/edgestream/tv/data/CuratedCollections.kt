@@ -52,19 +52,24 @@ object CuratedCollections {
                 val sources = f.optJSONArray("sources")?.let { a -> (0 until a.length()).mapNotNull { source(a.optJSONObject(it)) } }.orEmpty()
                 if (sources.isEmpty()) return@mapNotNull null
                 Folder(
-                    f.optString("id"), f.optString("title"),
+                    f.optString("id"), tidy(f.optString("title")),
                     f.optString("coverImageUrl").ifBlank { null }, f.optString("heroBackdropUrl").ifBlank { null }, sources,
                 )
             }
-            if (list.isEmpty()) null else Group(g.optString("id"), g.optString("title"), list)
+            // Organised: alphabetical, with same-titled folders merged (first wins).
+            val organised = list.sortedBy { it.title.lowercase() }.distinctBy { it.title.lowercase() }
+            if (organised.isEmpty()) null else Group(g.optString("id"), tidy(g.optString("title")), organised)
         }
     }
+
+    private fun tidy(s: String): String =
+        NameCleaner.tidyTitle(s).replace(Regex("""\s+"""), " ").trim()
 
     private fun source(o: JSONObject?): Source? {
         if (o == null || o.optString("provider") != "tmdb") return null
         val filters = o.optJSONObject("filters")?.let { f -> f.keys().asSequence().associateWith { k -> f.get(k).toString() } }.orEmpty()
         return Source(
-            o.optString("tmdbSourceType"), o.optString("title"), o.optString("mediaType") != "TV",
+            o.optString("tmdbSourceType"), tidy(o.optString("title")), o.optString("mediaType") != "TV",
             o.optLong("tmdbId").takeIf { it > 0 }, o.optString("sortBy").ifBlank { null }, filters,
         )
     }
