@@ -176,13 +176,14 @@ fun ShellScreen(
             .sortedBy { if (it.game.state == com.edgestream.tv.data.Sports.State.LIVE) 0 else 1 }.take(3)
         games + listOfNotNull(items.firstOrNull { it is BandItem.Alert }, items.firstOrNull { it is BandItem.Resume })
     }
-    // At rest, the room takes the spotlit game's colours; open sections light it themselves.
-    val roomGame = (spotlight as? BandItem.Game)?.game
-    LaunchedEffect(roomGame?.id, rest != null) { if (rest != null) com.edgestream.tv.ui.components.RoomLight.of(roomGame) }
+    val spotGame = (spotlight as? BandItem.Game)?.game
+    // Home has no room light: two teams' colours over the whole screen read as a tint. Clear any
+    // left by an open section (Odds, Sports light themselves) when Home is back at rest.
+    LaunchedEffect(rest != null) { if (rest != null) com.edgestream.tv.ui.components.RoomLight.clear() }
     // Rest on a live game and its channel starts behind Home; a short dwell so passing focus
     // doesn't spin streams up and down.
     val previewLookup by vm.sportsLookup.collectAsStateWithLifecycle()
-    val livePreviewGame = roomGame?.takeIf { rest?.inBand == true && it.state == com.edgestream.tv.data.Sports.State.LIVE }
+    val livePreviewGame = spotGame?.takeIf { rest?.inBand == true && it.state == com.edgestream.tv.data.Sports.State.LIVE }
     // Keyed on the lookup too: it fills in once the guide is matched, which can trail launch.
     LaunchedEffect(livePreviewGame?.id, previewLookup) {
         vm.preview.value = null
