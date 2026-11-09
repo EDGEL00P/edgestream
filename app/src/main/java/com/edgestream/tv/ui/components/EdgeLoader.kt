@@ -118,50 +118,68 @@ private fun rememberGlitch(): Glitch {
 }
 
 /**
- * EDGESTREAM is the progress bar: dim letters fill with white from the left as it loads (a
- * running fill when the step can't be measured), and glitch bursts tear through them.
+ * EDGESTREAM is the progress bar, lit like a strobe: one letter per tenth of the load. Lit
+ * letters burn white, the next one strobes before it locks on, the rest wait dim. When the step
+ * can't be measured the strobe chases through the word. Glitch bursts tear the whole word.
  */
 @Composable
 private fun GlitchWordmark(g: Glitch, progress: Float?) {
     val tick = g.tick
     val jitter = g.jitter
-    // Unmeasurable steps run a fill across and start again.
-    val fill = progress?.coerceIn(0f, 1f) ?: (((tick - g.start) % 1_600L) / 1_600f).let { 1f - (1f - it) * (1f - it) }
     val word = "EDGESTREAM"
+    val lit = strobeLit(progress, tick - g.start, word.length)
+    val strobeOn = (tick / STROBE_MS) % 2 == 0L
+    val split = 22f * jitter
     Box(contentAlignment = Alignment.Center) {
-        val split = 22f * jitter
-        // Colour channels slipping apart behind the letters: accent one way, the second accent the other.
-        Text(word, color = Edge.Accent.copy(alpha = (0.85f * jitter).coerceAtMost(0.85f)), fontFamily = Wordmark, fontSize = 120.sp, letterSpacing = 14.sp,
-            modifier = Modifier.drawWithContent { translate(left = -split, top = split * 0.25f) { this@drawWithContent.drawContent() } })
-        Text(word, color = Edge.Accent2.copy(alpha = (0.7f * jitter).coerceAtMost(0.7f)), fontFamily = Wordmark, fontSize = 120.sp, letterSpacing = 14.sp,
-            modifier = Modifier.drawWithContent { translate(left = split, top = -split * 0.2f) { this@drawWithContent.drawContent() } })
-        // The unfilled letters.
-        Text(word, color = Color.White.copy(alpha = 0.16f), fontFamily = Wordmark, fontSize = 120.sp, letterSpacing = 14.sp)
-        // The filled part, torn into slices during a burst.
-        Text(word, color = Color.White, fontFamily = Wordmark, fontSize = 120.sp, letterSpacing = 14.sp,
-            modifier = Modifier.drawWithContent {
-                val right = size.width * fill
-                if (jitter == 0f) { clipRect(right = right) { this@drawWithContent.drawContent() }; return@drawWithContent }
+        // Colour channels slipping apart behind the letters during a burst.
+        if (jitter > 0f) {
+            Text(word, color = Edge.Accent.copy(alpha = (0.85f * jitter).coerceAtMost(0.85f)), fontFamily = Wordmark, fontSize = 120.sp, letterSpacing = 14.sp,
+                modifier = Modifier.drawWithContent { translate(left = -split, top = split * 0.25f) { this@drawWithContent.drawContent() } })
+            Text(word, color = Edge.Accent2.copy(alpha = (0.7f * jitter).coerceAtMost(0.7f)), fontFamily = Wordmark, fontSize = 120.sp, letterSpacing = 14.sp,
+                modifier = Modifier.drawWithContent { translate(left = split, top = -split * 0.2f) { this@drawWithContent.drawContent() } })
+        }
+        Row(
+            Modifier.drawWithContent {
+                if (jitter == 0f) { drawContent(); return@drawWithContent }
                 val bands = 11
                 val h = size.height / bands
                 val seed = Random(tick / 50)
-                repeat(bands) { i ->
+                repeat(bands) { b ->
                     val dx = if (seed.nextFloat() < 0.5f) (seed.nextFloat() - 0.5f) * 140f * jitter else 0f
-                    clipRect(top = i * h, bottom = (i + 1) * h, right = right + dx) {
-                        translate(left = dx) { this@drawWithContent.drawContent() }
-                    }
+                    clipRect(top = b * h, bottom = (b + 1) * h) { translate(left = dx) { this@drawWithContent.drawContent() } }
                 }
-            })
-        // The leading edge of the fill: a thin accent line that jumps with the tear.
-        Box(
-            Modifier.matchParentSize().drawWithContent {
-                val x = size.width * fill + (if (jitter > 0f) (Random(tick / 50).nextFloat() - 0.5f) * 40f * jitter else 0f)
-                if (fill in 0.01f..0.99f) drawRect(Edge.Accent, topLeft = androidx.compose.ui.geometry.Offset(x - 2f, size.height * 0.2f),
-                    size = androidx.compose.ui.geometry.Size(4f, size.height * 0.6f))
             },
-        )
+        ) {
+            word.forEachIndexed { i, ch ->
+                val (alpha, color) = when {
+                    i < lit.full -> 1f to Color.White
+                    i == lit.full && lit.striking -> (if (strobeOn) 1f else 0.2f) to (if (strobeOn) Color.White else Edge.Accent)
+                    else -> 0.14f to Color.White
+                }
+                Text(
+                    ch.toString(), color = color.copy(alpha = alpha), fontFamily = Wordmark, fontSize = 120.sp,
+                    modifier = Modifier.padding(horizontal = 7.dp),
+                )
+            }
+        }
     }
 }
+
+/** How many letters burn, and whether the next is mid-strobe. */
+internal data class StrobeLit(val full: Int, val striking: Boolean)
+
+/**
+ * Letters lit for [progress] (0..1) across [letters]; with no progress, a chase that sweeps the
+ * word every [STROBE_CHASE_MS] of [elapsedMs].
+ */
+internal fun strobeLit(progress: Float?, elapsedMs: Long, letters: Int): StrobeLit {
+    val f = (progress?.coerceIn(0f, 1f) ?: ((elapsedMs % STROBE_CHASE_MS) / STROBE_CHASE_MS.toFloat())) * letters
+    val full = f.toInt().coerceAtMost(letters)
+    return StrobeLit(full, full < letters && f - full > 0.05f)
+}
+
+private const val STROBE_MS = 55L
+internal const val STROBE_CHASE_MS = 1_800L
 
 /** The step and how far along it is, under the wordmark, with the measured connection speed. */
 @Composable
