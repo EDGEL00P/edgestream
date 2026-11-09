@@ -91,6 +91,7 @@ import com.edgestream.tv.ui.components.Logo
 import com.edgestream.tv.ui.components.OneLine
 import com.edgestream.tv.ui.components.Pill
 import com.edgestream.tv.ui.components.ProgressLine
+import com.edgestream.tv.ui.components.RealBadge
 import com.edgestream.tv.ui.components.TeamLogo
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -676,13 +677,13 @@ private fun NowInfo(
     val position = if (tick >= 0) vm.player.exo.currentPosition else 0L
     val duration = vm.player.exo.duration.coerceAtLeast(0)
     if (badges.isNotEmpty()) Row(
-        Modifier.padding(bottom = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Modifier.padding(bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         badges.forEach { b ->
-            if (b.image.isEmpty()) Pill(b.name, color = Edge.Accent)
-            else AsyncImage(b.image, b.name, Modifier.height(28.dp), contentScale = ContentScale.FillHeight)
+            if (b.image.isEmpty()) RealBadge(b.name, dot = Edge.Accent)
+            else AsyncImage(b.image, b.name, Modifier.height(22.dp), contentScale = ContentScale.FillHeight)
         }
     }
     when (np) {

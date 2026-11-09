@@ -65,10 +65,20 @@ class StreamBadges internal constructor(
             return Config(BadgePacks.url(s.badgePack), regionBadges(region, language, s.contentCertification))
         }
 
-        /** Locally-defined badges for the viewer's region, language and certification ceiling. */
+        /** Gold language wordmarks from the same pack as the stream badges. */
+        private const val LANG_BADGE = "https://raw.githubusercontent.com/djgenesis/stream/refs/heads/main/badges/LANG%20"
+        /** Real country flags, one per ISO 3166-1 code. */
+        private const val FLAG_BADGE = "https://raw.githubusercontent.com/ashleedawg/flags/master/"
+
+        private val LANG_CODES = mapOf(
+            "en" to "EN", "de" to "DE", "es" to "ES", "fr" to "FR", "hi" to "HI",
+            "it" to "IT", "ja" to "JA", "ko" to "KO", "pt" to "PT", "ru" to "RU", "zh" to "ZH",
+        )
+
+        /** Language and region get real badge artwork; certification is drawn as a chip. */
         fun regionBadges(region: String, language: String, certification: String): List<Badge> = buildList {
-            if (language.isNotBlank()) add(Badge(language.uppercase(), ""))
-            if (region.isNotBlank()) add(Badge(region.uppercase(), ""))
+            LANG_CODES[language.lowercase()]?.let { add(Badge(language.uppercase(), "$LANG_BADGE$it.png")) }
+            if (region.isNotBlank()) add(Badge(region.uppercase(), "$FLAG_BADGE${region.uppercase()}.png"))
             if (certification.isNotBlank()) add(Badge(certification.uppercase(), ""))
         }
 

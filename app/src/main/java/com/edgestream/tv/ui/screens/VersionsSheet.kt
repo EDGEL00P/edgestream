@@ -42,6 +42,7 @@ import com.edgestream.tv.ui.EdgeShapes
 import com.edgestream.tv.ui.components.FocusSurface
 import com.edgestream.tv.ui.components.OneLine
 import com.edgestream.tv.ui.components.Pill
+import com.edgestream.tv.ui.components.RealBadge
 import kotlinx.coroutines.delay
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
@@ -154,10 +155,12 @@ private fun VersionRow(
                 ) {
                     badges.take(5).forEach { Pill(it, color = if (it == "Best match" || it == "Ready") Edge.Accent else Edge.PanelHi.copy(alpha = 1f)) }
                 }
-                if (images.isNotEmpty()) Row(Modifier.padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (images.isNotEmpty()) Row(Modifier.padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     images.forEach { b ->
-                        if (b.image.isEmpty()) Pill(b.name, color = com.edgestream.tv.ui.Edge.Accent)
-                        else coil3.compose.AsyncImage(b.image, b.name, Modifier.height(24.dp), contentScale = androidx.compose.ui.layout.ContentScale.FillHeight)
+                        if (b.image.isEmpty()) RealBadge(b.name, dot = com.edgestream.tv.ui.Edge.Accent, compact = true)
+                        else coil3.compose.AsyncImage(b.image, b.name, Modifier.height(20.dp), contentScale = androidx.compose.ui.layout.ContentScale.FillHeight)
                     }
                 }
                 Text(title, style = MaterialTheme.typography.titleMedium, color = Edge.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)

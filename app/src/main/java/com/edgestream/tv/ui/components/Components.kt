@@ -266,6 +266,50 @@ fun Pill(text: String, modifier: Modifier = Modifier, color: Color = Edge.Accent
     )
 }
 
+/**
+ * A badge that reads like real on-air artwork: dark glass, a hairline lit edge and an optional
+ * marker dot instead of a flat colour block. Used for LIVE, warnings and text-only tags.
+ */
+@Composable
+fun RealBadge(
+    text: String,
+    modifier: Modifier = Modifier,
+    dot: Color? = null,
+    pulsing: Boolean = false,
+    compact: Boolean = false,
+) {
+    val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "badgeDot")
+    val breath by t.animateFloat(
+        1f, 0.25f,
+        androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(900),
+            androidx.compose.animation.core.RepeatMode.Reverse,
+        ),
+        label = "breath",
+    )
+    Row(
+        modifier.clip(RoundedCornerShape(6.dp))
+            .background(Edge.PanelHi)
+            .border(1.dp, Edge.Text.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
+            .padding(horizontal = if (compact) 6.dp else 8.dp, vertical = if (compact) 2.dp else 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (dot != null) {
+            Box(
+                Modifier.size(if (compact) 5.dp else 6.dp).clip(CircleShape)
+                    .background(dot.copy(alpha = if (pulsing) breath else 1f)),
+            )
+            Spacer(Modifier.width(if (compact) 4.dp else 6.dp))
+        }
+        Text(
+            text.uppercase(), style = MaterialTheme.typography.labelSmall,
+            fontSize = if (compact) 10.sp else 12.sp, color = Edge.Text,
+            fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp, maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     // Compact section head for panels/lists: sentence-case label over a hairline.
@@ -544,29 +588,16 @@ fun PosterCard(v: com.edgestream.tv.data.db.VodEntity, modifier: Modifier = Modi
 }
 
 /**
- * The one LIVE marker: a theme-accent tag with a white dot breathing like a recording light.
+ * The one LIVE marker: real glass badge with a theme-accent dot breathing like a recording light.
  * [compact] for list rows; the full size for heroes and the top deck.
  */
 @Composable
 fun LiveBadge(modifier: Modifier = Modifier, label: String = "LIVE", compact: Boolean = false) {
-    val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "live")
-    val dot by t.animateFloat(
-        1f, 0.2f,
-        androidx.compose.animation.core.infiniteRepeatable(
-            androidx.compose.animation.core.tween(900), androidx.compose.animation.core.RepeatMode.Reverse,
-        ),
-        label = "dot",
+    RealBadge(
+        text = label,
+        modifier = modifier,
+        dot = Edge.Live,
+        pulsing = true,
+        compact = compact,
     )
-    Row(
-        modifier.clip(RoundedCornerShape(if (compact) 4.dp else 6.dp)).background(Edge.Live)
-            .padding(horizontal = if (compact) 7.dp else 10.dp, vertical = if (compact) 3.dp else 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(if (compact) 6.dp else 8.dp).graphicsLayer { alpha = dot }.clip(CircleShape).background(Edge.OnAccent))
-        Text(
-            label, color = Edge.OnAccent, fontSize = if (compact) 11.sp else 15.sp, fontWeight = FontWeight.Black,
-            letterSpacing = if (compact) 1.sp else 1.5.sp, maxLines = 1,
-            modifier = Modifier.padding(start = if (compact) 5.dp else 7.dp),
-        )
-    }
 }

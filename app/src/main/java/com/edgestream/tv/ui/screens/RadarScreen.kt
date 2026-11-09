@@ -77,7 +77,7 @@ import com.edgestream.tv.data.Trackers
 import com.edgestream.tv.ui.AppViewModel
 import com.edgestream.tv.ui.Edge
 import com.edgestream.tv.ui.components.EdgeButton
-import com.edgestream.tv.ui.components.Pill
+import com.edgestream.tv.ui.components.RealBadge
 import com.edgestream.tv.ui.components.WeatherGlyph
 import java.time.Instant
 import java.time.ZoneId
@@ -491,7 +491,7 @@ private fun RadarHud(
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 10.dp).weight(1f, fill = false),
             )
-            if (warnings.isNotEmpty()) Pill("${warnings.size} ALERT", color = Edge.Alert)
+            if (warnings.isNotEmpty()) com.edgestream.tv.ui.components.RealBadge("${warnings.size} ALERT", dot = Edge.Alert, compact = true)
         }
         val summary = buildList {
             when {
